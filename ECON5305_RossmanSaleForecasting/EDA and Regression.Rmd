@@ -1,0 +1,833 @@
+---
+title: "Rossmann Sales Forecasting - EDA"
+author: "ECON 5305 - Group 1"
+date: "`r format(Sys.time(), '%B %d, %Y')`"
+output:
+  html_document:
+    number_sections: yes
+    theme: flatly
+    toc: yes
+    toc_depth: 3
+---
+
+```{r setup, include=FALSE}
+
+knitr::opts_chunk$set(
+	fig.width = 8.5,
+	# include = FALSE,
+	# echo = FALSE,
+	message = FALSE,
+	warning = FALSE
+)
+
+```
+
+# Prepare your environment
+
+Following needs to be done in order to prepare your environment:
+
++ Clean environment of all variables and functions
++ Clear environment of packages
++ Load packages required for analysis
+    - Only load packages that you need
++ Set colour preferences for graphs
++ Load functions
+
+```{r}
+
+# Clear environment of variables and functions
+
+rm(list = ls(all = TRUE)) 
+
+# Clear environment of packages
+
+if(is.null(sessionInfo()$otherPkgs) == FALSE) {
+  lapply(paste("package:", names(sessionInfo()$otherPkgs), sep=""), 
+         detach, character.only = TRUE, unload = TRUE)
+}
+
+# load required libraries (Use install.packages(tidyverse), for example, if needed)
+
+library(here)
+library(tidyverse)
+library(skimr)
+library(dlookr)
+library(janitor)
+library(lubridate)
+library(fpp2)
+library(olsrr)
+library(kableExtra)
+library(gridExtra)
+library(GGally)
+library(corrplot)
+library(broom)
+
+# read in the data
+
+train <- read_csv("train.csv")
+# train <- read_csv(here::here("data", "raw", "train.csv"))
+# test <- read_csv(here::here("data", "raw", "test.csv"))
+
+# predefined functions and variables
+
+freq_var <- 365.25 # 365.25
+train_start <- "2013-01-01"
+train_end <- "2015-06-19"
+test_start <- "2015-06-20"
+test_end <- "2015-07-31"
+
+```
+
+# Description of the data
+
+The dataset we use for this project is from by the Kaggle competition Rossmann Store Sales - Forecast sales using store, and promotion data. The dataset was provided with data on 1115 stores located across Germany. The data included daily sales records of 942 days for each store from 1st Jan 2013 to 31st July 2015, each record has nine variables, the description of the data set is shown in the table below:
+
++ Store: Each store in the dataset has a unique ID
++ DayOfWeek: Varies from 1 to 7 corresponding to a week going from Monday to Sunday
++ Date: Sales date
++ Sales: The turnover of a store on given day
++ Customers: The number of customers who visited the store on given day
++ Open: Indicates whether a store is open (1) or closed (0)
++ Promo: Indicates whether a store is running a promo (1) or not (0) on any given day
++ StateHoliday:	Indicates a state holiday. Normally all stores, with few exceptions, are closed on state holidays. Note that all schools are closed on public holidays and weekends; holidays are either public holidays (a), Easter (b), Christmas (c) or not a holiday at all (0)
++ SchoolHoliday: Indicates if a store was affected by the closure of public schools
+
+There is no record has missing value in the dataset. However, there are 180 stores missing 184 days of data in the middle of the series from 1st July 2014 to 31st Dec 2014.
+
+# Exploratory Analysis
+
+These tables below show the descriptive statistic of each variable in the dataset. Sales vary from 0 to 41,551 as there are days when Stores were closed in the dataset corresponding to the number of customers visited on that day. 17% of sales records are on closed days. Over the period, Rossmann store only 38% applied promotion. It looks like school holiday does not has a significant effect on Rossmann Sales since there is only 18% of the sales record were affected by the closure of public schools.
+
+```{r}
+
+summary(train)
+
+sapply(train, function(x) sum(is.na(x)))
+
+cor(train[c("DayOfWeek", "Sales","Customers", "Open","Promo","SchoolHoliday")])
+
+sapply(train, function(x) sum(is.na(x))) # check for missing values
+sapply(train, function(x) sum(is.infinite(x)))
+
+train <- train %>%
+  mutate(
+    SchoolHoliday =  factor(SchoolHoliday, levels = c(0, 1)),
+    StateHoliday  = factor(StateHoliday, levels = c(0, "a", "b", "c")),
+    Open = factor(Open, levels = c(0,1)),
+    Promo = factor(Promo, levels = c(0, 1)),
+    DayOfWeek = factor(DayOfWeek, levels = c(1,2,3,4,5,6,7)),
+    Store = factor(Store),
+    Date = as.Date(Date)
+  )
+
+# Create function for frequency tables 
+count_table <- function(x,colname){
+   x = enquo(x)
+   train %>%
+      tabyl(!!x) %>%
+      adorn_totals()%>%
+      adorn_pct_formatting(digits = 0 )
+   }
+
+# Make count tables for univariate variables 
+count_table(DayOfWeek,"DayofWeek")
+count_table(Open,"Open")
+count_table(Promo,"promo")
+count_table(StateHoliday,"SateHoliday")
+count_table(SchoolHoliday,"SchoolHoliday")
+
+count_hist <- function(plot){
+  plot + geom_histogram(bins = 52, fill = "Blue")+
+    theme_bw() + 
+    theme(panel.border = element_blank(), 
+                       panel.grid.major = element_blank(),
+                       panel.grid.minor = element_blank()) + 
+    labs(y ="Count")
+}
+
+count_hist(ggplot(train, aes(Customers)))
+count_hist(ggplot(train, aes(Sales)) )
+
+train %>% 
+  select(Sales, DayOfWeek, Promo) %>%
+  group_by(DayOfWeek, Promo) %>%
+  dplyr::summarise(avgSale = mean(Sales)) %>%
+  ggplot(aes(x = DayOfWeek, y=avgSale, fill = Promo)) +
+  geom_bar(stat = "identity", position = "dodge")
+train %>% 
+  select(Sales, DayOfWeek, StateHoliday) %>%
+  group_by(DayOfWeek, StateHoliday) %>%
+  dplyr::summarise(avgSale = mean(Sales)) %>%
+  ggplot(aes(x = DayOfWeek, y=avgSale, fill = StateHoliday)) +
+  geom_bar(stat = "identity", position = "dodge")
+train %>% 
+  select(Sales, DayOfWeek, SchoolHoliday) %>%
+  group_by(DayOfWeek, SchoolHoliday) %>%
+  dplyr::summarise(avgSale = mean(Sales)) %>%
+  ggplot(aes(x = DayOfWeek, y=avgSale, fill = SchoolHoliday)) +
+  geom_bar(stat = "identity", position = "dodge")
+
+```
+
+The figures below represent the average sales of Rossmann Store from 2013 to 2015. These graphs shows strong seasonal patterns in the dataset, weekly seasonality, and annual seasonality. The data of 2013, 2014 and 2015 have the same patterns. There is no apparent trend in the data over this period.
+
+```{r}
+
+train %>% 
+  select(Store, Sales, Date) %>%
+  mutate(Year =  format(Date, "%Y"), Month =as.numeric(format(Date, "%m")) ) %>%
+  group_by(Month, Year) %>%
+  dplyr::summarise(sumsale = sum(Sales)/1000000) %>%
+  ggplot(aes(x = Month, y= sumsale, colour =Year)) +
+  geom_line(stat = "identity") +geom_point() +
+  ylab("Total Sales") +
+  xlab("Month") +
+  scale_x_continuous(
+    breaks=c(1,2,3,4,5,6,7,8,9,10,11,12),
+    labels=c("Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec")
+  ) +
+  ggtitle("Seasonal Sales")
+
+train %>% 
+  select(Store, Sales, DayOfWeek, Date) %>%
+  mutate(Year =  format(Date, "%Y") ) %>%
+  group_by(DayOfWeek, Year) %>%
+  dplyr::summarise(avgSale = mean(Sales)) %>%
+  ggplot(aes(x = as.numeric(DayOfWeek), y= avgSale, colour =Year)) +
+  geom_line(stat = "identity") +geom_point() +
+  ylab("Avg Sales") +
+  xlab("Day of Week")
+
+avgSales <- train %>% 
+  select(Sales, Date) %>%
+  group_by(Date) %>%
+  dplyr::summarise(avgSales = mean(Sales))
+
+tsavgSales <- ts(avgSales["avgSales"], frequency = freq_var, start= c(2013))
+
+autoplot(tsavgSales) +
+  ggtitle("Rossman Daily Average Sales Plot") +
+  ylab("Average Sales") +
+  xlab("Date")
+
+ggseasonplot(tsavgSales, year.labels = TRUE,season.labels= "") +
+  theme(axis.text.x = element_blank()) +
+  ggtitle("Seasonal Plot")
+
+```
+
+# Descriptive Stats
+
+```{r}
+
+### DESCRIPTIVE STATS AT AN AVERAGE STORE LEVEL
+
+train <- read_csv("train.csv")
+# train <- read_csv(here::here("data", "raw", "train.csv"))
+
+dstats <- train %>%
+  mutate(
+    Open = case_when(
+      Open == 0 ~ 'Closed',
+      Open == 1 ~ "Open"
+    ),
+    DayOfWeek = case_when(
+      DayOfWeek == 1 ~ 'Monday',
+      DayOfWeek == 2 ~ 'Tuesday',
+      DayOfWeek == 3 ~ 'Wednesday',
+      DayOfWeek == 4 ~ 'Thursday',
+      DayOfWeek == 5 ~ 'Friday',
+      DayOfWeek == 6 ~ 'Saturday',
+      DayOfWeek == 7 ~ 'Sunday'
+    ),
+    Promo = case_when(
+      Promo == 0 ~ 'No',
+      Promo == 1 ~ "Yes"
+    ),
+    StateHoliday = case_when(
+      StateHoliday == 0 ~ 'No',
+      StateHoliday == 1 ~ "Yes"
+    ),
+    SchoolHoliday = case_when(
+      SchoolHoliday == 0 ~ 'No',
+      SchoolHoliday == 1 ~ "Yes"
+    )
+  )
+
+desc_table_names_1 <- c(
+  "Day of Week", "Variable", "Mean", "Median", "St.Dev", "Min", "Max"
+)
+
+dstats %>%
+  group_by(DayOfWeek) %>% 
+  skim(Sales, Customers) %>% 
+  filter(stat %in% c("mean", "sd", "p0", "p50", "p100")) %>% 
+  # mutate(value = round(value, 1)) %>% 
+  select(DayOfWeek, variable, stat, value) %>% 
+  mutate(
+    variable = case_when(
+      variable == "Sales" ~ "Sales", TRUE ~ "Customers"
+    )) %>% 
+  spread(stat, value) %>% 
+  select(DayOfWeek, variable, mean, p50, sd, p0, p100) %>% 
+  arrange(variable, DayOfWeek) %>% 
+  kableExtra::kable(
+    col.names = desc_table_names_1,
+    digits = 1, 
+    format.args = list(big.mark = ',')
+  ) %>% 
+  kable_styling(
+    bootstrap_options = c("striped", "bordered"),
+    full_width = FALSE, position = "center", row_label_position = 'c'
+  ) %>% 
+  add_header_above(c("Descriptive Statistics by Day Of Week - Quantity" = 7)) %>% 
+  footnote(
+    alphabet = paste("Number of records in Table", nrow(dstats), sep = ': ')
+  )	
+
+```
+
+
+# Treating the data
+
+We will use the training dataset to build the model, validate accuracy and arrive at predictions. The training dataset will be divided into 3 parts:
+
++ train: all observations between 2013-01-01 and 2014-12-31 (training set)
++ hold: all observations between 2015-01-01 and 2015-06-19 (holdout set)
++ valid: all observations between 2015-06-20 and 2015-07-31 (validation set)
+
+```{r}
+
+# Clear environment of variables and functions
+
+rm(list = ls(all = TRUE)) 
+
+# predefined functions and variables
+
+mode <- function(x) {
+  ux <- unique(x)
+  ux[which.max(tabulate(match(x, ux)))]
+}
+
+freq_var <- 365.25 # 365.25
+train_start <- "2013-01-01"
+train_end <- "2015-06-19"
+test_start <- "2015-06-20"
+test_end <- "2015-07-31"
+
+# read in the data
+
+train <- read_csv("train.csv")
+# train <- read_csv(here::here("data", "raw", "train.csv"))
+
+# clean up names of columns
+
+train <- train %>% clean_names()
+  
+stores_complete <- train %>% 
+  group_by(store) %>% 
+  summarise(no_of_days = n()) %>% 
+  filter(no_of_days == 942)
+
+# filter train for stores that have data for all days
+
+train <- train %>% inner_join(stores_complete %>% select(-no_of_days))
+
+```
+
+# Use Case 1 - Forecast at overall level
+
+The first forecast will be for sales at an overall level, i.e. all stores put together.
+
+To prepare the data for modeling, we need to do the following:
+
++ Differentiate state holidays from other days, where state holidays could be either Public Holidays, Easter or Christmas
++ Convert the data into time series for time series forecasting
+
+```{r}
+
+# encode state holidays
+# roll up data to an overall level using appropriate functions
+
+train <- train %>% 
+  mutate(state_holiday = case_when(
+    day(date) == 25 & month(date) == 12 ~ "Christmas",
+    !month(date) %in% c(3, 4) & is.na(state_holiday) ~ "Public",
+    month(date) %in% c(3, 4) & is.na(state_holiday) ~ "Easter",
+    TRUE ~ "None"
+  )) %>%
+  mutate(state_holiday = factor(
+    state_holiday,
+    levels = c("None", "Easter", "Christmas", "Public"),
+    labels = c(0, 1, 2, 3)
+  )) %>%
+  mutate(state_holiday = as.numeric(as.character(state_holiday))) %>% 
+  mutate(day_of_week = wday(date) - 1) %>% 
+  group_by(date) %>% 
+  summarize(
+    day_of_week = mean(day_of_week),
+    sales = sum(sales), 
+    customers = sum(customers),
+    open = mode(open), 
+    promo = mode(promo), 
+    state_holiday = mode(state_holiday), 
+    school_holiday = mode(school_holiday)
+  ) %>% 
+  mutate(
+    day_label = wday(date, label = TRUE),
+    day_sun = if_else(day_label == "Sun", 1, 0),
+    day_mon = if_else(day_label == "Mon", 1, 0),
+    day_tue = if_else(day_label == "Tue", 1, 0),
+    day_wed = if_else(day_label == "Wed", 1, 0),
+    day_thu = if_else(day_label == "Thu", 1, 0),
+    day_fri = if_else(day_label == "Fri", 1, 0),
+    day_sat = if_else(day_label == "Sat", 1, 0)
+  ) %>% 
+  ungroup()
+
+# convert to a time series matrix for time series modeling
+
+ts_train <- ts(
+  data = train %>% select(-date), 
+  start = c(2013, 1),
+  frequency = freq_var
+)
+
+# divide into training, holdout and validation sets
+
+ts_train_valid <- window(ts_train, start = c(2015, yday(test_start)), frequency = freq_var) # 365.25
+# ts_train_hold <- window(ts_train, start = c(2015, 1), end = c(2015, yday(train_end)), frequency = freq_var)
+ts_train_train <- window(ts_train, end = c(2015, yday(train_end)), frequency = freq_var)
+
+valid <- train %>% filter(between(date, as.Date(test_start), as.Date(test_end)))
+# hold <- train %>% filter(between(date, as.Date("2015-01-01"), as.Date("2015-06-19")))
+train <- train %>% filter(between(date, as.Date(train_start), as.Date(train_end)))
+
+```
+
+We use best subset regression to select the best model, using the full model as a benchmark.
+
+```{r}
+
+# full linear model
+
+full_lm_fit <- lm(
+  data = train %>% select(-date), 
+  sales ~ customers + day_mon + day_tue + day_wed + day_thu + day_fri + day_sat + open + promo + state_holiday + school_holiday # day_of_week
+)
+
+summary(full_lm_fit)
+
+# best subset regression to select the best combination of variables
+
+ols_step_best_subset(full_lm_fit)
+
+```
+
+By optimizing for the lowest value of AIC in the best subset regression, we have arrived at a model that takes into account the following variables:
+
++ customers: number of customers
++ day_of_week: numbered 1 to 7 from Monday to Sunday
++ open: whether the store(s) was open or not
++ promo: whether a promo was being run or not
++ state_holiday: whether there was a state holiday (a public holiday, Easter, Christmas or none at all)
+
+```{r}
+
+# time series regression model using the best model selected using best subsets
+
+full_tslm_fit <- tslm(
+  data = ts_train_train, 
+  sales ~ customers + day_mon + day_thu + day_fri + day_sat + open + promo + state_holiday
+  # customers + day_mon + day_tue + day_wed + day_thu + day_fri + day_sat + open + promo + state_holiday # + fourier(sales, 2)
+)
+
+summary(full_tslm_fit) # model summary
+
+checkresiduals(full_tslm_fit) # checking assumptions
+
+```
+
+The above model tells us when everything is kept constant, the beta estimates for every variables are significant at a 5% level. As for individual variables, every individual customer provides an incremental EUR 12 in sales. The sales are heavily influenced by the day of the week, due to which the model predicts that stores lose more than EUR 2m in revenue when they are open, everything else remaining constant. Sales are also shown to increase by EUR 413,000 when promos are run. On the other hand, revenue falls by more than EUR 113,000 when there is a state holiday.
+
+A limitation of this model is that there is a high degree of autocorrelation in sales figures over the time period, indicating that the residuals do not come from a White Noise series. However, the residuals are approximately normally distributed, and we can say that they are randomly disributed as well over time.
+
+In evaluating this model, we must check forecasting accuracy and compare how the model we have chosen fares against the benchmarks of the Mean Methods, Naive Method and the Drift Method. We expect our model to perform much better than any of these methods.
+
+```{r}
+
+horizon <- 42
+
+# taking the sales columns of the train, hold and valid to arrive at benchmark forecasts
+
+ts_train_sales <- ts_train_train[,"sales"]
+# ts_hold_sales <- ts_train_hold[,"sales"]
+ts_valid_sales <- ts_train_valid[,"sales"]
+
+# mean, naive and drift methods
+
+fcast_mean <- meanf(ts_train_sales, h = horizon)
+fcast_naive <- rwf(ts_train_sales, h = horizon)
+fcast_snaive <- snaive(ts_train_sales, h = horizon)
+fcast_drift <- rwf(ts_train_sales, drift = TRUE, h = horizon)
+
+# forecasting using the model we have chosen
+
+fcast_model <- forecast(full_tslm_fit, valid)
+
+autoplot(ts_train_train[,"sales"]) +
+  autolayer(fcast_model)
+
+# tabulating accuracy comparisons
+
+accuracy_mean <- accuracy(fcast_mean, ts_valid_sales)
+accuracy_naive <- accuracy(fcast_naive, ts_valid_sales)
+accuracy_drift <- accuracy(fcast_drift, ts_valid_sales)
+accuracy_model <- accuracy(fcast_model, ts_valid_sales)
+
+accuracy_comp <- rbind(
+  accuracy_mean, accuracy_naive, accuracy_drift, accuracy_model
+)[c(2,4,6,8),]
+rownames(accuracy_comp) <- c("Mean method", "Naive Method", "Drift Method", "Regression")
+accuracy_comp
+
+# display_sales <- window(ts_train_sales, start = 2015)
+# 
+# autoplot(display_sales) +
+#   autolayer(ts_valid_sales, series = "Actual Sales") +
+#   autolayer(fcast_mean, series = "Mean", PI = FALSE) +
+#   autolayer(fcast_naive, series = "Naive", PI = FALSE) +
+#   # autolayer(fcast_snaive, series = "Seasonal Naive", PI = FALSE) +
+#   autolayer(fcast_drift, series = "Drift", PI = FALSE) +
+#   autolayer(fcast_model, series = "TSLM Model", PI = FALSE) +
+#   theme_minimal() +
+#   ggtitle("Forecasts for daily sales for Rossmann drug stores (6 weeks ending Jul 31 2015") +
+#   xlab("Year") + ylab("Sales (in EUR)") +
+#   guides(colour = guide_legend(title = "Forecast"))
+
+```
+
+In comparing the regression model we have used with the benchmark methods, we can confirm that this model performs far better than any of the benchmark methods that is measured against, based on a MASE of 0.08, which is the lowest of all models used. 
+
+# Use Case 2 - Forecasting for a single store
+
+There are two scenarios we need to consider - (1) a store that is closed on Sundays (2) a store that is open on Sundays.
+
+## Store 1
+
+Store No 1 is not open on Sundays.
+
+```{r}
+
+# clear workspace
+
+rm(list = ls(all = TRUE)) 
+
+# # reload the mode function
+# 
+# mode <- function(x) {
+#   ux <- unique(x)
+#   ux[which.max(tabulate(match(x, ux)))]
+# }
+
+# predefined functions and variables
+
+freq_var <- 365.25 # 365.25
+train_start <- "2013-01-01"
+train_end <- "2015-06-19"
+test_start <- "2015-06-20"
+test_end <- "2015-07-31"
+
+# read in the data
+
+train <- read_csv("train.csv")
+
+# clean up names of columns, and filter for a single store
+
+train <- train %>% clean_names() %>% filter(store == 1)
+
+# encode holidays
+# convert into time series data
+# divide into training, holdout and validation sets
+
+train <- train %>% 
+  mutate(state_holiday = case_when(
+    day(date) == 25 & month(date) == 12 ~ "Christmas",
+    !month(date) %in% c(3, 4) & is.na(state_holiday) ~ "Public",
+    month(date) %in% c(3, 4) & is.na(state_holiday) ~ "Easter",
+    TRUE ~ "None"
+  )) %>%
+  mutate(state_holiday = factor(
+    state_holiday,
+    levels = c("None", "Easter", "Christmas", "Public"),
+    labels = c(0, 1, 2, 3)
+  )) %>%
+  mutate(state_holiday = as.numeric(as.character(state_holiday))) %>% 
+  mutate(day_of_week = wday(date) - 1) %>% 
+  mutate(
+    day_label = wday(date, label = TRUE),
+    day_sun = if_else(day_label == "Sun", 1, 0),
+    day_mon = if_else(day_label == "Mon", 1, 0),
+    day_tue = if_else(day_label == "Tue", 1, 0),
+    day_wed = if_else(day_label == "Wed", 1, 0),
+    day_thu = if_else(day_label == "Thu", 1, 0),
+    day_fri = if_else(day_label == "Fri", 1, 0),
+    day_sat = if_else(day_label == "Sat", 1, 0)
+  ) %>% 
+  arrange(date)
+
+ts_train <- ts(
+  data = train %>% select(-date), 
+  start = c(2013, 1),
+  frequency = freq_var
+)
+
+ts_train_valid <- window(ts_train, start = c(2015, yday(test_start)), frequency = freq_var) # 365.25
+# ts_train_hold <- window(ts_train, start = c(2015, 1), end = c(2015, yday(train_end)), frequency = freq_var)
+ts_train_train <- window(ts_train, end = c(2015, yday(train_end)), frequency = freq_var)
+
+valid <- train %>% filter(between(date, as.Date(test_start), as.Date(test_end)))
+# hold <- train %>% filter(between(date, as.Date("2015-01-01"), as.Date("2015-06-19")))
+train <- train %>% filter(between(date, as.Date(train_start), as.Date(train_end)))
+
+```
+
+As in the case for all stores, we will use the best subset method to arrive at the best model, optimizing for AIC.
+
+```{r}
+
+# full linear model
+
+full_lm_fit <- lm(
+  data = train %>% select(-date), 
+  sales ~ customers + day_mon + day_tue + day_wed + day_thu + day_fri + day_sat + open + promo + state_holiday + school_holiday
+)
+
+summary(full_lm_fit)
+
+# best subset regression to select the best combination of variables
+
+ols_step_best_subset(full_lm_fit)
+
+```
+
+
+
+```{r}
+
+# time series regression model using the best model selected using best subsets
+
+full_tslm_fit <- tslm(
+  data = ts_train_train, 
+  sales ~ customers + day_tue + day_wed + day_thu + day_fri + open + promo
+)
+
+summary(full_tslm_fit) # model summary
+
+checkresiduals(full_tslm_fit) # checking assumptions
+
+```
+
+We have 3 independent variables in our estimated model, with 2 positive and 1 negative coefficient, and a negative intercept. Customers and running promos are positively correlated with Sales, and . Both customers and promo are significant at a 1% level. After applying the OLS best subset model we find that model index 3 is the best model, which includes promo, customers and day of the week. This has the lowest AIC and will be the model we will use going forward. 
+
+This model has a p-value close to zero, which indicates that we have autocorrelation. We reject the null hypothesis and conclude significant autocorrelation. The ACF plot also confirms that we have autocorrelation and shows a significant number of lags outside our confidence interval. Looking at the residuals they do not appear to have a mean of zero. However, variation is constant throughout our dataset. The histogram of residuals has a left tail that is longer than the right tail, and hence we cannot assume the residuals are normally disributed. 
+
+After applying our training data to our holdout data and testing different models against the accuracy of these models we found the regression model is the better one out of drift, mean, naïve and regression. The regression method had the lowest MASE, which is the measure we used to identify our best forecasting method. 
+
+```{r}
+
+horizon <- 42
+
+# taking the sales columns of the train, hold and valid to arrive at benchmark forecasts
+
+ts_train_sales <- ts_train_train[,"sales"]
+# ts_hold_sales <- ts_train_hold[,"sales"]
+ts_valid_sales <- ts_train_valid[,"sales"]
+
+# mean, naive and drift methods
+
+fcast_mean <- meanf(ts_train_sales, h = horizon)
+fcast_naive <- rwf(ts_train_sales, h = horizon)
+fcast_snaive <- snaive(ts_train_sales, h = horizon)
+fcast_drift <- rwf(ts_train_sales, drift = TRUE, h = horizon)
+
+# forecasting using the model we have chosen
+
+fcast_model <- forecast(full_tslm_fit, valid)
+
+# tabulating accuracy comparisons
+
+accuracy_mean <- accuracy(fcast_mean, ts_valid_sales)
+accuracy_naive <- accuracy(fcast_naive, ts_valid_sales)
+accuracy_drift <- accuracy(fcast_drift, ts_valid_sales)
+accuracy_model <- accuracy(fcast_model, ts_valid_sales)
+
+accuracy_comp <- rbind(
+  accuracy_mean, accuracy_naive, accuracy_drift, accuracy_model
+)[c(2,4,6,8),]
+rownames(accuracy_comp) <- c("Mean method", "Naive Method", "Drift Method", "Regression")
+accuracy_comp
+
+```
+
+## Store 85
+
+Store 85 is open on Sundays.
+
+```{r}
+
+# clear workspace
+
+# rm(list = ls(all = TRUE)) 
+
+# # reload the mode function
+# 
+# mode <- function(x) {
+#   ux <- unique(x)
+#   ux[which.max(tabulate(match(x, ux)))]
+# }
+
+# predefined functions and variables
+
+freq_var <- 365.25 # 365.25
+train_start <- "2013-01-01"
+train_end <- "2015-06-19"
+test_start <- "2015-06-20"
+test_end <- "2015-07-31"
+
+# read in the data
+
+train <- read_csv(here::here("data", "raw", "train.csv"))
+
+# clean up names of columns, and filter for a single store
+
+train <- train %>% clean_names() %>% filter(store == 85)
+
+# encode holidays
+# convert into time series data
+# divide into training, holdout and validation sets
+
+train <- train %>% 
+  mutate(state_holiday = case_when(
+    day(date) == 25 & month(date) == 12 ~ "Christmas",
+    !month(date) %in% c(3, 4) & is.na(state_holiday) ~ "Public",
+    month(date) %in% c(3, 4) & is.na(state_holiday) ~ "Easter",
+    TRUE ~ "None"
+  )) %>%
+  mutate(state_holiday = factor(
+    state_holiday,
+    levels = c("None", "Easter", "Christmas", "Public"),
+    labels = c(0, 1, 2, 3)
+  )) %>%
+  mutate(state_holiday = as.numeric(as.character(state_holiday))) %>% 
+  mutate(day_of_week = wday(date) - 1) %>% 
+  mutate(
+    day_label = wday(date, label = TRUE),
+    day_sun = if_else(day_label == "Sun", 1, 0),
+    day_mon = if_else(day_label == "Mon", 1, 0),
+    day_tue = if_else(day_label == "Tue", 1, 0),
+    day_wed = if_else(day_label == "Wed", 1, 0),
+    day_thu = if_else(day_label == "Thu", 1, 0),
+    day_fri = if_else(day_label == "Fri", 1, 0),
+    day_sat = if_else(day_label == "Sat", 1, 0)
+  ) %>% 
+  arrange(date)
+
+ts_train <- ts(
+  data = train %>% select(-date), 
+  start = c(2013, 1),
+  frequency = freq_var
+)
+
+ts_train_valid <- window(ts_train, start = c(2015, yday(test_start)), frequency = freq_var) # 365.25
+# ts_train_hold <- window(ts_train, start = c(2015, 1), end = c(2015, yday(train_end)), frequency = freq_var)
+ts_train_train <- window(ts_train, end = c(2015, yday(train_end)), frequency = freq_var)
+
+valid <- train %>% filter(between(date, as.Date(test_start), as.Date(test_end)))
+# hold <- train %>% filter(between(date, as.Date("2015-01-01"), as.Date("2015-06-19")))
+train <- train %>% filter(between(date, as.Date(train_start), as.Date(train_end)))
+
+```
+
+As in the case for all stores, we will use the best subset method to arrive at the best model, optimizing for AIC.
+
+```{r}
+
+# full linear model
+
+full_lm_fit <- lm(
+  data = train %>% select(-date), 
+  sales ~ customers + day_mon + day_tue + day_wed + day_thu + day_fri + day_sat + promo + state_holiday + school_holiday # + open
+)
+
+summary(full_lm_fit)
+
+# best subset regression to select the best combination of variables
+
+ols_step_best_subset(full_lm_fit)
+
+```
+
+
+
+```{r}
+
+# time series regression model using the best model selected using best subsets
+
+full_tslm_fit <- tslm(
+  data = ts_train_train, 
+  sales ~ customers + day_wed + day_thu + day_fri + day_sat + promo + state_holiday
+)
+
+summary(full_tslm_fit) # model summary
+
+checkresiduals(full_tslm_fit) # checking assumptions
+
+```
+
+In this model, we also have 5 independent variables for this store. The intercept is a very high negative number but is offset by promo and customers variables that is significant at a 1% level. For every customer that enters the store sales is increased by 7.72 Euros on average. None of the other variables are significant.
+
+As for the OLS best subset, the best model turns out to be model 2, that includes customers and promo. This has the lowest AIC and a high R-square. 
+
+Running the Breusch-Godfrey test shows that the p-value is very close to zero. We reject the null hypothesis and conclude significant autocorrelation in the data. The ACF has less lags that are outside the confidence interval than what was the case for store 1, but it still confirms autocorrelation and especially the first lags are outside the confidence interval. 
+
+The residuals have a mean close to zero and variation in the residuals appear have a constant variance. In this case the model is not violating assumption 2 or 3, that says zero mean and constant variance. 
+The histogram shows that the left tail is taller than the right tail, this might suggest that the residuals might not be normally distributed. 
+
+After applying our best model to the training data and testing it with the holdout data we have tested different forecasting methods to see which one the best for our case is. For store 85, as with the other two use cases, the regression method returns the lowest MASE and is the most accurate forecasting method for our data. 
+
+```{r}
+
+horizon <- 42
+
+# taking the sales columns of the train, hold and valid to arrive at benchmark forecasts
+
+ts_train_sales <- ts_train_train[,"sales"]
+# ts_hold_sales <- ts_train_hold[,"sales"]
+ts_valid_sales <- ts_train_valid[,"sales"]
+
+# mean, naive and drift methods
+
+fcast_mean <- meanf(ts_train_sales, h = horizon)
+fcast_naive <- rwf(ts_train_sales, h = horizon)
+fcast_snaive <- snaive(ts_train_sales, h = horizon)
+fcast_drift <- rwf(ts_train_sales, drift = TRUE, h = horizon)
+
+# forecasting using the model we have chosen
+
+fcast_model <- forecast(full_tslm_fit, valid)
+
+# tabulating accuracy comparisons
+
+accuracy_mean <- accuracy(fcast_mean, ts_valid_sales)
+accuracy_naive <- accuracy(fcast_naive, ts_valid_sales)
+accuracy_drift <- accuracy(fcast_drift, ts_valid_sales)
+accuracy_model <- accuracy(fcast_model, ts_valid_sales)
+
+accuracy_comp <- rbind(
+  accuracy_mean, accuracy_naive, accuracy_drift, accuracy_model
+)[c(2,4,6,8),]
+rownames(accuracy_comp) <- c("Mean method", "Naive Method", "Drift Method", "Regression")
+accuracy_comp
+
+```

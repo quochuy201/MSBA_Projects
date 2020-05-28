@@ -1,0 +1,476 @@
+---
+title: "Final term Project - MLD"
+author: "___________"
+date: "`r format(Sys.time(), '%B %d, %Y')`"
+output:
+  html_document:
+    number_sections: yes
+    theme: cosmo
+    toc: yes
+    toc_depth: 3
+    toc_float: yes
+---
+
+```{r setup, include=FALSE}
+
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE,
+                      fig.width = 8.5) # fig.width = 7.25
+
+# Course: ECON 5300
+# Title: Final Term Project - MLD
+# Purpose: conclude mortgage lending institutions discrimination against minorities
+# Author: ________________
+
+```
+
+# Goal of the EDA:
+
+The goal of this EDA is to understand what is the effect of minorities and racial/ethenic groups on mortgage lending , and to coclude the finding.
+
+# Prerequisites for analysis
+
+Following needs to be prior to any analysis:
+
++ Clear your environment
++ Load required packages
++ Organize your work and point to the right directories
+
+```{r include=FALSE}
+
+# Clear environment of variables and functions
+rm(list = ls(all = TRUE)) 
+
+# Clear environment of packages
+if(is.null(sessionInfo()$otherPkgs) == FALSE) {
+  lapply(paste("package:", names(sessionInfo()$otherPkgs), sep=""), 
+         detach, character.only = TRUE, unload = TRUE)
+}
+
+# load required libraries
+library(tidyverse)
+library(here)
+library(skimr)
+library(janitor)
+library(gridExtra)
+library(GGally)
+library(knitr)
+library(kableExtra)
+library(pander)
+library(formattable)
+library(ggrepel)
+library(scales)
+library(psych)
+
+```
+
+Following needs to be done prior to starting an EDA:
+
++ Load raw data
++ Make changes to data based on business rules definitions
++ Perform joins as required
+
+```{r include=FALSE}
+
+raw_data <- read_csv("./MLD Data File-1.csv")
+
+```
+
+```{r}
+mld_data <- raw_data %>% 
+  rename(cred_meet = GDLIN, other_oblg = OBRAT) %>%
+  filter(cred_meet != 666, MALE != ".", MARRIED !=".")
+              mutate( MARRIED = factor(MARRIED),
+                      cred_meet = factor(cred_meet),
+                      BLACK = factor(BLACK),
+                      HISPAN = factor(HISPAN),
+                      MALE = factor(MALE),
+                      APPROVE = factor(APPROVE))
+
+str(mld_data)
+```
+
+# Summary of data
+
+We look at a summary of data:
+
++ to know how clean the data is
++ to check if typical values (in the middle or at extremes) make sense 
++ to confirm if there missing values that need to be addressed
+
+The **skim** function in the **skimr** package summarises columns separately by data type - (here) factor variables followed by integers and numerics
+
+```{r, results = 'asis'}
+
+panderOptions('table.split.table', Inf)
+skim(mld_data) %>% pander()
+
+```
+
+**Conclusions**:
+
++ There are 1989 records with no missing values
++ Majority of loans are approved
++ Most people are not black
++ Mostly people credit conditions are met
++ Almost all loan applicants are non-hispanic 
++ Male applicants are male
++ Majority of people applying for loan are married
+
++ We have false data in dataset:
+  - Credit meet has a value (666) for 2 records
+  - Male and married have 15 and 3 observations with value (.)
+
+# Exploratory Data Analysis (Basic)
+
+## Univariate non-graphical -- Categorical
+=========================================
+```{r}
+# Inspect descriptive statistics of data
+summary(mld_data)
+
+```
+
+**Conclusions:**
+
++ Other obligation has min - 0.0 and maximum percentage value as - 95%
++ Loan Approval price has min amount - 0.02105 and maximum amount is - 2.57143. What is the unit here?
+
+
+```{r}
+# number of observations also proportion for Approval status
+tabyl(mld_data$APPROVE) %>%
+  adorn_pct_formatting() %>% 
+  kableExtra::kable(col.names = c("Approve", "Count", "Percent")) %>% 
+  kable_styling(full_width = FALSE)
+
+```
+
+
+```{r}
+# number of observations also proportion for Black applicant
+tabyl(mld_data$BLACK) %>%
+  adorn_pct_formatting() %>% 
+  kableExtra::kable(col.names = c("Black Applicants", "Count", "Percent")) %>% 
+  kable_styling(full_width = FALSE)
+
+```
+
+
+```{r}
+# number of observations also proportion for Black applicant
+tabyl(mld_data$cred_meet) %>%
+  adorn_pct_formatting() %>% 
+  kableExtra::kable(col.names = c("Credit Cond Met", "Count", "Percent")) %>% 
+  kable_styling(full_width = FALSE)
+
+```
+
+
+```{r}
+# number of observations also proportion for Black applicant
+tabyl(mld_data$HISPAN) %>%
+  adorn_pct_formatting() %>% 
+  kableExtra::kable(col.names = c("Hispanic Applicants", "Count", "Percent")) %>% 
+  kable_styling(full_width = FALSE)
+
+```
+
+
+```{r}
+# number of observations also proportion for Black applicant
+tabyl(mld_data$MALE) %>%
+  adorn_pct_formatting() %>% 
+  kableExtra::kable(col.names = c("Male Applicants", "Count", "Percent")) %>% 
+  kable_styling(full_width = FALSE)
+
+```
+
+
+```{r}
+# number of observations also proportion for Black applicant
+tabyl(mld_data$MARRIED) %>%
+  adorn_pct_formatting() %>% 
+  kableExtra::kable(col.names = c("Married Applicants", "Count", "Percent")) %>% 
+  kable_styling(full_width = FALSE)
+
+```
+
+
+## Univariate graphical -- Categorical
+=========================================
+
+We need to look at frequencies of categorical variables to confirm the distribution
+
+```{r}
+# Code histograms using grid.arrange so can see all quant variables together
+# Graph between each promo and its count
+# Graph between each flavor and its count
+# graph between each brand, its falor and count
+# and vice versa
+grid.arrange(
+  mld_data %>% 
+    ggplot(aes(BLACK, fill = cred_meet)) +
+      geom_bar(position = "dodge") +
+       theme_minimal() +
+    theme(
+      panel.grid.major = element_blank(),
+      panel.grid.minor = element_blank(),
+    axis.line = element_line(colour = "#D3D3D3")),
+  mld_data %>% 
+    ggplot(aes(HISPAN, fill = cred_meet)) +
+      geom_bar(position = "dodge") +
+       theme_minimal() +
+    theme(
+      panel.grid.major = element_blank(),
+      panel.grid.minor = element_blank(),
+    axis.line = element_line(colour = "#D3D3D3")),
+  mld_data %>% 
+    ggplot(aes(MALE, fill = cred_meet)) +
+      geom_bar(position = "dodge") +
+       theme_minimal() +
+    theme(
+      panel.grid.major = element_blank(),
+      panel.grid.minor = element_blank(),
+    axis.line = element_line(colour = "#D3D3D3")),
+  mld_data %>% 
+    ggplot(aes(MARRIED, fill = cred_meet)) +
+      geom_bar(position = "dodge") +
+       theme_minimal() +
+    theme(
+      panel.grid.major = element_blank(),
+      panel.grid.minor = element_blank(),
+    axis.line = element_line(colour = "#D3D3D3")),
+  ncol = 2
+)
+
+
+# Graph between each promo and its count
+# Graph between each adv and its count
+# graph between each promo with adv
+# and vice versa
+grid.arrange(
+  mld_data %>% 
+    ggplot(aes(BLACK, fill = APPROVE)) +
+      geom_bar(position = "dodge") +
+       theme_minimal() +
+    theme(
+      panel.grid.major = element_blank(),
+      panel.grid.minor = element_blank(),
+    axis.line = element_line(colour = "#D3D3D3")),
+  mld_data %>% 
+    ggplot(aes(HISPAN, fill = APPROVE)) +
+      geom_bar(position = "dodge") +
+       theme_minimal() +
+    theme(
+      panel.grid.major = element_blank(),
+      panel.grid.minor = element_blank(),
+    axis.line = element_line(colour = "#D3D3D3")),
+  mld_data %>% 
+    ggplot(aes(MALE, fill = APPROVE)) +
+      geom_bar(position = "dodge") +
+       theme_minimal() +
+    theme(
+      panel.grid.major = element_blank(),
+      panel.grid.minor = element_blank(),
+    axis.line = element_line(colour = "#D3D3D3")),
+  mld_data %>% 
+    ggplot(aes(MARRIED, fill = APPROVE)) +
+      geom_bar(position = "dodge") +
+       theme_minimal() +
+    theme(
+      panel.grid.major = element_blank(),
+      panel.grid.minor = element_blank(),
+    axis.line = element_line(colour = "#D3D3D3")),
+  ncol = 2
+)
+
+```
+
+
+**Univariate non-graphical -- Quantitative**
+=========================================
+
+```{r}
+# Get descrptive stats 
+summary(mld_data)
+
+```
+
+## Univariate graphical -- Quantitative
+=========================================
+
+We need to look at histograms of quantitative variables to confirm what we have just seen. 
+
+```{r message = FALSE}
+# Code histograms using grid.arrange so can see all quant variables together
+# histogram to see how sales, price, unit and volume is distributed in sample given
+grid.arrange(
+  mld_data %>% 
+    ggplot(aes(other_oblg)) +
+      geom_histogram() +
+       theme_minimal() +
+    theme(
+      panel.grid.major = element_blank(),
+      panel.grid.minor = element_blank(),
+    axis.line = element_line(colour = "#D3D3D3")),
+  mld_data %>% 
+    ggplot(aes(LOANPRC)) +
+      geom_histogram() +
+       theme_minimal() +
+    theme(
+      panel.grid.major = element_blank(),
+      panel.grid.minor = element_blank(),
+    axis.line = element_line(colour = "#D3D3D3")),
+  ncol = 2
+)
+```
+
+**Boxplots of quantitative data**
+
+```{r}
+# Set grid pattern for graph arrangement
+# draw the box plots to see the variation in all quantitative variables : unit, price,volume, sales
+par(mfrow = c(1, 2))
+boxplot(mld_data$other_oblg, main = "Other Obligations")
+boxplot(mld_data$LOANPRC, main = "Loan Amount")
+```
+
+
+Multivariate non-graphical -- Categorical
+=========================================
+Use cross-tabs for counts/proportion/percent 
+
+```{r}
+
+# Proportions might be more informative
+mld_data %>% 
+  tabyl(MARRIED, cred_meet) %>% 
+  adorn_totals(where = c("row", "col")) %>% 
+  adorn_percentages(denominator = "all") %>%  
+  adorn_pct_formatting(digits = 0) %>% 
+  kableExtra::kable() %>% 
+  kable_styling(full_width = FALSE)
+
+```
+
+
+```{r}
+
+# Proportions might be more informative
+mld_data %>% 
+  tabyl(BLACK, cred_meet) %>% 
+  adorn_totals(where = c("row", "col")) %>% 
+  adorn_percentages(denominator = "all") %>%  
+  adorn_pct_formatting(digits = 0) %>% 
+  kableExtra::kable() %>% 
+  kable_styling(full_width = FALSE)
+
+```
+
+
+```{r}
+
+# Proportions might be more informative
+mld_data %>% 
+  tabyl(HISPAN, cred_meet) %>% 
+  adorn_totals(where = c("row", "col")) %>% 
+  adorn_percentages(denominator = "all") %>%  
+  adorn_pct_formatting(digits = 0) %>% 
+  kableExtra::kable() %>% 
+  kable_styling(full_width = FALSE)
+
+```
+
+
+```{r}
+
+# Proportions might be more informative
+mld_data %>% 
+  tabyl(MALE, cred_meet) %>% 
+  adorn_totals(where = c("row", "col")) %>% 
+  adorn_percentages(denominator = "all") %>%  
+  adorn_pct_formatting(digits = 0) %>% 
+  kableExtra::kable() %>% 
+  kable_styling(full_width = FALSE)
+
+```
+
+
+```{r}
+
+# Proportions might be more informative
+mld_data %>% 
+  tabyl(MARRIED, APPROVE) %>% 
+  adorn_totals(where = c("row", "col")) %>% 
+  adorn_percentages(denominator = "all") %>%  
+  adorn_pct_formatting(digits = 0) %>% 
+  kableExtra::kable() %>% 
+  kable_styling(full_width = FALSE)
+
+```
+
+
+```{r}
+
+# Proportions might be more informative
+mld_data %>% 
+  tabyl(BLACK, APPROVE) %>% 
+  adorn_totals(where = c("row", "col")) %>% 
+  adorn_percentages(denominator = "all") %>%  
+  adorn_pct_formatting(digits = 0) %>% 
+  kableExtra::kable() %>% 
+  kable_styling(full_width = FALSE)
+
+```
+
+
+```{r}
+
+# Proportions might be more informative
+mld_data %>% 
+  tabyl(HISPAN, APPROVE) %>% 
+  adorn_totals(where = c("row", "col")) %>% 
+  adorn_percentages(denominator = "all") %>%  
+  adorn_pct_formatting(digits = 0) %>% 
+  kableExtra::kable() %>% 
+  kable_styling(full_width = FALSE)
+
+```
+
+
+```{r}
+
+# Proportions might be more informative
+mld_data %>% 
+  tabyl(MALE, APPROVE) %>% 
+  adorn_totals(where = c("row", "col")) %>% 
+  adorn_percentages(denominator = "all") %>%  
+  adorn_pct_formatting(digits = 0) %>% 
+  kableExtra::kable() %>% 
+  kable_styling(full_width = FALSE)
+
+```
+
+## Multivariate non-graphical -- Quantitative
+=========================================
+
+The standard measure we can use to assess relationships is correlation.
+
+```{r}
+# Find correlation of quantiative variables
+
+cor(mld_data[, c(3,8)])
+
+```
+
+Multivariate graphical code -- Quantitative
+=========================================
+
+```{r message=FALSE}
+
+# the correlation plot from the psych package -- `install.package("psych")` if not installed already
+
+pairs.panels(mld_data[, c(3,8)])
+
+```
+

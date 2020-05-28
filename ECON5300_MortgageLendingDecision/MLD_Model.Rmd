@@ -1,0 +1,666 @@
+---
+title: "R Notebook"
+output:
+  html_document:
+    df_print: paged
+  word_document: default
+always_allow_html: yes
+---
+
+
+```{r echo = FALSE}
+# Clear environment of variables and functions
+rm(list = ls(all = TRUE)) 
+
+# Clear environment of packages
+if(is.null(sessionInfo()$otherPkgs) == FALSE) {
+  lapply(paste("package:", names(sessionInfo()$otherPkgs), sep=""), 
+         detach, character.only = TRUE, unload = TRUE)}
+
+```
+
+```{r echo = FALSE}
+library(tidyverse)
+library(ggplot2)
+library(Rcpp)
+library(kableExtra)
+library(aod)
+library(janitor)
+library(summarytools)
+library(xtable)
+library(pastecs)
+library(magrittr)
+library(qwraps2)
+library(stargazer)
+library(stats)
+```
+
+```{r echo = FALSE}
+raw_data <- read_csv("./MLD Data File-1.csv")
+
+summary(raw_data)
+```
+
+```{r}
+mld <- raw_data %>%
+          filter(GDLIN != 666, MARRIED !=".") %>%
+          mutate( MARRIED = factor(MARRIED),
+                      GDLIN = factor(GDLIN),
+                      BLACK = factor(BLACK),
+                      HISPAN = factor(HISPAN),
+                      APPROVE = factor(APPROVE))
+
+summary(mld)
+
+
+```
+
+
+
+Descriptive statistic
+```{r}
+mld_black <- mld %>% filter(BLACK == 1) %>%
+                    select(-BLACK,-HISPAN)
+mld_hispan <- mld %>% filter(HISPAN == 1) %>%
+                      select(-BLACK,-HISPAN)
+mld_white <- mld  %>% filter(HISPAN == 0 & BLACK == 0) %>%
+                        select(-BLACK,-HISPAN)
+```
+
+#Overall Descriptive Statistic
+###Approve
+```{r}
+mld %>%
+  tabyl(APPROVE) %>%
+  adorn_pct_formatting() %>% 
+  kableExtra::kable(col.names = c("Approve", "Count", "Percent")) %>% 
+  kable_styling(full_width = FALSE)
+
+```
+
+###Married
+```{r}
+mld %>%
+  tabyl(MARRIED) %>%
+   adorn_totals(where = c("row"))  %>%
+  adorn_pct_formatting() %>% 
+  kableExtra::kable(col.names = c("Married", "Count", "Percent")) %>% 
+  kable_styling(full_width = FALSE)
+```
+
+###GLIND
+```{r}
+mld %>%
+  tabyl(GDLIN) %>%
+   adorn_totals(where = c("row"))  %>%
+  adorn_pct_formatting() %>% 
+  kableExtra::kable(col.names = c("Guideline", "Count", "Percent")) %>% 
+  kable_styling(full_width = FALSE)
+```
+
+###Black
+```{r}
+mld %>%
+  tabyl(BLACK) %>%
+  adorn_totals(where = c("row"))  %>%
+  adorn_pct_formatting() %>% 
+  kableExtra::kable(col.names = c("Black", "Count", "Percent")) %>% 
+  kable_styling(full_width = FALSE)
+```
+### Hispan
+```{r}
+mld %>%
+  tabyl(HISPAN) %>%
+   adorn_totals(where = c("row"))  %>%
+  adorn_pct_formatting() %>% 
+  kableExtra::kable(col.names = c("Hispan", "Count", "Percent")) %>% 
+  kable_styling(full_width = FALSE)
+```
+
+
+### Male
+```{r}
+mld %>%
+  tabyl(MALE) %>%
+   adorn_totals(where = c("row"))  %>%
+  adorn_pct_formatting() %>% 
+  kableExtra::kable(col.names = c("Male", "Count", "Percent")) %>% 
+  kable_styling(full_width = FALSE)
+```
+
+### Other obligation
+```{r}
+desc_tab<-rbind(c(min(mld$OBRAT), mean(mld$OBRAT), max(mld$OBRAT), median(mld$OBRAT), sd(mld$OBRAT)),
+      c(min(mld$LOANPRC), mean(mld$LOANPRC), max(mld$LOANPRC), median(mld$LOANPRC), sd(mld$LOANPRC))) 
+row.names(desc_tab) <- c("Other Obligation", "Loan amount/purchase") 
+
+desc_tab %>% round(2) %>%
+      kableExtra::kable(col.names = c("Min", "Mean", "Max", "Median", "Standard Deviation")) %>% 
+      kable_styling(full_width = FALSE)
+```
+
+# Black subset Descriptive Statistic
+### Approve
+```{r}
+mld_black %>%
+  tabyl(APPROVE) %>%
+  adorn_pct_formatting() %>% 
+  kableExtra::kable(col.names = c("Approve", "Count", "Percent")) %>% 
+  kable_styling(full_width = FALSE)
+
+
+
+```
+
+### Married
+```{r}
+mld_black %>%
+  tabyl(MARRIED) %>%
+   adorn_totals(where = c("row"))  %>%
+  adorn_pct_formatting() %>% 
+  kableExtra::kable(col.names = c("Married", "Count", "Percent")) %>% 
+  kable_styling(full_width = FALSE)
+```
+
+### GLIND
+```{r}
+mld_black %>%
+  tabyl(GDLIN) %>%
+   adorn_totals(where = c("row"))  %>%
+  adorn_pct_formatting() %>% 
+  kableExtra::kable(col.names = c("Guideline", "Count", "Percent")) %>% 
+  kable_styling(full_width = FALSE)
+```
+
+### Male
+```{r}
+mld_black %>%
+  tabyl(MALE) %>%
+   adorn_totals(where = c("row"))  %>%
+  adorn_pct_formatting() %>% 
+  kableExtra::kable(col.names = c("Male", "Count", "Percent")) %>% 
+  kable_styling(full_width = FALSE)
+```
+
+### Other obligation
+```{r}
+desc_tab<-rbind(c(min(mld_black$OBRAT), mean(mld_black$OBRAT), max(mld_black$OBRAT),median(mld_black$OBRAT), sd(mld_black$OBRAT)),
+      c(min(mld_black$LOANPRC), mean(mld_black$LOANPRC), max(mld_black$LOANPRC), median(mld_black$LOANPRC), sd(mld_black$LOANPRC))) 
+row.names(desc_tab) <- c("Other Obligation", "Loan amount/purchase") 
+
+desc_tab %>% round(2) %>%
+      kableExtra::kable(col.names = c("Min", "Mean", "Max", "Median","Standard Deviation")) %>% 
+      kable_styling(full_width = FALSE)
+```
+
+
+# Hispan subset Descriptive Statistic
+### Approve
+```{r}
+mld_hispan %>%
+  tabyl(APPROVE) %>%
+  adorn_pct_formatting() %>% 
+  kableExtra::kable(col.names = c("Approve", "Count", "Percent")) %>% 
+  kable_styling(full_width = FALSE)
+
+
+
+```
+
+### Married
+```{r}
+mld_hispan %>%
+  tabyl(MARRIED) %>%
+   adorn_totals(where = c("row"))  %>%
+  adorn_pct_formatting() %>% 
+  kableExtra::kable(col.names = c("Married", "Count", "Percent")) %>% 
+  kable_styling(full_width = FALSE)
+```
+
+### GLIND
+```{r}
+mld_hispan %>%
+  tabyl(GDLIN) %>%
+   adorn_totals(where = c("row"))  %>%
+  adorn_pct_formatting() %>% 
+  kableExtra::kable(col.names = c("Guideline", "Count", "Percent")) %>% 
+  kable_styling(full_width = FALSE)
+```
+
+### Male
+```{r}
+mld_hispan %>%
+  tabyl(MALE) %>%
+   adorn_totals(where = c("row"))  %>%
+  adorn_pct_formatting() %>% 
+  kableExtra::kable(col.names = c("Male", "Count", "Percent")) %>% 
+  kable_styling(full_width = FALSE)
+```
+
+### Other obligation
+```{r}
+desc_tab<-rbind(c(min(mld_hispan$OBRAT), mean(mld_hispan$OBRAT), max(mld_hispan$OBRAT), median(mld_hispan$OBRAT), sd(mld_hispan$OBRAT)),
+      c(min(mld_hispan$LOANPRC), mean(mld_hispan$LOANPRC), max(mld_hispan$LOANPRC), median(mld_hispan$LOANPRC),sd(mld_hispan$LOANPRC))) 
+row.names(desc_tab) <- c("Other Obligation", "Loan amount/purchase") 
+
+desc_tab %>% round(2) %>%
+      kableExtra::kable(col.names = c("Min", "Mean", "Max", "Median","Standard Deviation")) %>% 
+      kable_styling(full_width = FALSE)
+```
+
+# White subset Descriptive Statistic
+### Approve
+```{r}
+mld_white %>%
+  tabyl(APPROVE) %>%
+  adorn_pct_formatting() %>% 
+  kableExtra::kable(col.names = c("Approve", "Count", "Percent")) %>% 
+  kable_styling(full_width = FALSE)
+
+
+
+```
+
+### Married
+```{r}
+mld_white %>%
+  tabyl(MARRIED) %>%
+   adorn_totals(where = c("row"))  %>%
+  adorn_pct_formatting() %>% 
+  kableExtra::kable(col.names = c("Married", "Count", "Percent")) %>% 
+  kable_styling(full_width = FALSE)
+```
+
+### GLIND
+```{r}
+mld_white %>%
+  tabyl(GDLIN) %>%
+   adorn_totals(where = c("row"))  %>%
+  adorn_pct_formatting() %>% 
+  kableExtra::kable(col.names = c("Guideline", "Count", "Percent")) %>% 
+  kable_styling(full_width = FALSE)
+```
+
+### Male
+```{r}
+mld_white %>%
+  tabyl(MALE) %>%
+   adorn_totals(where = c("row"))  %>%
+  adorn_pct_formatting() %>% 
+  kableExtra::kable(col.names = c("Male", "Count", "Percent")) %>% 
+  kable_styling(full_width = FALSE)
+```
+
+### Other obligation
+```{r}
+desc_tab<-rbind(c(min(mld_white$OBRAT), mean(mld_white$OBRAT), max(mld_white$OBRAT), median(mld_white$OBRAT),sd(mld_white$OBRAT)),
+      c(min(mld_white$LOANPRC), mean(mld_white$LOANPRC), max(mld_white$LOANPRC), median(mld_white$LOANPRC),sd(mld_white$LOANPRC))) 
+row.names(desc_tab) <- c("Other Obligation", "Loan amount/purchase") 
+
+desc_tab %>% round(2) %>%
+      kableExtra::kable(col.names = c("Min", "Mean", "Max", "Median","Standard Deviation")) %>% 
+      kable_styling(full_width = FALSE)
+```
+
+
+
+# Estimate Logit Model
+```{r}
+mld <- mld %>%
+        select(-MALE)
+
+LogitOverallModel <- glm(APPROVE ~ ., data = mld, 
+                 family = "binomial")
+summary(LogitOverallModel)
+```
+
+```{r}
+#Generate Odds Ratios
+exp(coef(LogitOverallModel))
+
+logLik(LogitOverallModel)
+```
+
+```{r}
+meanOBRAT <- mean(mld$OBRAT)
+meanLNPRC <- mean(mld$LOANPRC)
+
+#Define prototypical loan applicants (you will need more than 3)
+#White - married - guideline
+prototype1 <- data.frame(MARRIED = "1", GDLIN = "1", OBRAT = meanOBRAT, BLACK = "0", HISPAN = "0", LOANPRC = meanLNPRC)
+#White - married - no guideline
+prototype2 <- data.frame(MARRIED = "1", GDLIN = "0", OBRAT = meanOBRAT, BLACK = "0", HISPAN = "0", LOANPRC = meanLNPRC)
+#White - singel - guideline
+prototype3 <- data.frame(MARRIED = "0", GDLIN = "1", OBRAT = meanOBRAT, BLACK = "0", HISPAN = "0", LOANPRC = meanLNPRC)
+#White - single - no guideline
+prototype4 <- data.frame(MARRIED = "0", GDLIN = "0", OBRAT = meanOBRAT, BLACK = "0", HISPAN = "0", LOANPRC = meanLNPRC)
+
+#Black - married - guideline
+prototype5 <- data.frame(MARRIED = "1", GDLIN = "1", OBRAT= meanOBRAT, BLACK = "1", HISPAN = "0", LOANPRC = meanLNPRC)
+#Black - married - no guideline
+prototype6 <- data.frame(MARRIED = "1", GDLIN = "0", OBRAT=meanOBRAT, BLACK = "1", HISPAN = "0", LOANPRC = meanLNPRC)
+#Black - singel - guideline
+prototype7 <- data.frame(MARRIED = "0", GDLIN = "1", OBRAT=meanOBRAT, BLACK = "1", HISPAN = "0", LOANPRC = meanLNPRC)
+#Black - single - no guideline
+prototype8 <- data.frame(MARRIED = "0", GDLIN = "0", OBRAT=meanOBRAT, BLACK = "1", HISPAN = "0", LOANPRC = meanLNPRC)
+
+
+#hispan - married - guideline
+prototype9 <- data.frame(MARRIED = "1", GDLIN = "1", OBRAT=meanOBRAT, BLACK = "0", HISPAN = "1", LOANPRC = meanLNPRC)
+#hispan - married - no guideline
+prototype10 <- data.frame(MARRIED = "1", GDLIN = "0", OBRAT=meanOBRAT, BLACK = "0", HISPAN = "1", LOANPRC = meanLNPRC)
+#hispan - singel - guideline
+prototype11 <- data.frame(MARRIED = "0", GDLIN = "1", OBRAT=meanOBRAT, BLACK = "0", HISPAN = "1", LOANPRC = meanLNPRC)
+#hispan - single - no guideline
+prototype12 <- data.frame(MARRIED = "0", GDLIN = "0", OBRAT=meanOBRAT, BLACK = "0", HISPAN = "1", LOANPRC = meanLNPRC)
+
+
+```
+
+```{r}
+
+prototype1$logitprob <- predict(LogitOverallModel, newdata = prototype1, type ="response")
+prototype1
+
+prototype2$logitprob <- predict(LogitOverallModel, newdata = prototype2, type ="response")
+prototype2
+
+prototype3$logitprob <- predict(LogitOverallModel, newdata = prototype3, type ="response")
+prototype3
+
+prototype4$logitprob <- predict(LogitOverallModel, newdata = prototype4, type ="response")
+prototype4
+
+prototype5$logitprob <- predict(LogitOverallModel, newdata = prototype5, type ="response")
+prototype5
+
+prototype6$logitprob <- predict(LogitOverallModel, newdata = prototype6, type ="response")
+prototype6
+
+prototype7$logitprob <- predict(LogitOverallModel, newdata = prototype7, type ="response")
+prototype7
+
+prototype8$logitprob <- predict(LogitOverallModel, newdata = prototype8, type ="response")
+prototype8
+
+prototype9$logitprob <- predict(LogitOverallModel, newdata = prototype9, type ="response")
+prototype9
+
+prototype10$logitprob <- predict(LogitOverallModel, newdata = prototype10, type ="response")
+prototype10
+
+prototype11$logitprob <- predict(LogitOverallModel, newdata = prototype11, type ="response")
+prototype11
+
+prototype12$logitprob <- predict(LogitOverallModel, newdata = prototype12, type ="response")
+prototype12
+
+```
+
+```{r}
+logitestimate <- rbind(prototype1,
+                          prototype2,
+                          prototype3,
+                          prototype4,
+                          prototype5,
+                          prototype6,
+                          prototype7,
+                          prototype8,
+                          prototype9,
+                          prototype10,
+                          prototype11,
+                          prototype12)
+logitestimate
+```
+
+
+# Estimate Probit Model
+```{r}
+ProbitModel <- glm(APPROVE ~., data = mld, 
+                  family = "binomial" (link = "probit"))
+summary(ProbitModel)
+```
+
+## Predict probabilities for prototypical individuals
+```{r}
+
+prototype1$probitprob <- predict(ProbitModel, newdata = prototype1, type ="response")
+
+prototype2$probitprob <- predict(ProbitModel, newdata = prototype2, type ="response")
+
+prototype3$probitprob <- predict(ProbitModel, newdata = prototype3, type ="response")
+
+prototype4$probitprob <- predict(ProbitModel, newdata = prototype4, type ="response")
+
+prototype5$probitprob <- predict(ProbitModel, newdata = prototype5, type ="response")
+
+prototype6$probitprob <- predict(ProbitModel, newdata = prototype6, type ="response")
+
+prototype7$probitprob <- predict(ProbitModel, newdata = prototype7, type ="response")
+
+prototype8$probitprob <- predict(ProbitModel, newdata = prototype8, type ="response")
+
+prototype9$probitprob <- predict(ProbitModel, newdata = prototype9, type ="response")
+
+prototype10$probitprob <- predict(ProbitModel, newdata = prototype10, type ="response")
+
+prototype11$probitprob <- predict(ProbitModel, newdata = prototype11, type ="response")
+
+prototype12$probitprob <- predict(ProbitModel, newdata = prototype12, type ="response")
+
+```
+
+```{r}
+probitestimate <- rbind(prototype1,
+                          prototype2,
+                          prototype3,
+                          prototype4,
+                          prototype5,
+                          prototype6,
+                          prototype7,
+                          prototype8,
+                          prototype9,
+                          prototype10,
+                          prototype11,
+                          prototype12)
+probitestimate
+```
+
+
+
+
+
+```{r results = "asis"}
+LogitOverallModel$oddratia <- exp(coef(LogitOverallModel))
+variable.names(LogitOverallModel)
+logittable <- as.data.frame(cbind(variable.names(LogitOverallModel),
+                                  coef(LogitOverallModel),
+                                  coef(summary(LogitOverallModel))[,"Std. Error"],
+                                  exp(coef(LogitOverallModel))))
+names(logittable) <- c("Variables", "Coefficient","SE", "Odd ratio")
+kable(logittable) %>% kable_styling(full_width = FALSE)
+
+summary(LogitOverallModel)
+xtable(LogitOverallModel, type='html', html.table.attributes = "border=0") 
+
+logLik(hispanmodel)
+```
+
+
+```{r}
+as.data.frame(summary(ProbitModel)$coefficients)[,c("Estimate","Std. Error", "Pr(>|z|)")]
+
+```
+
+```{r echo = FALSE}
+# mld_black <- mld %>% filter(BLACK == 1) %>%
+#                     select(-BLACK,-HISPAN)
+# mld_hispan <- mld %>% filter(HISPAN == 1) %>%
+#                       select(-BLACK,-HISPAN)
+# mld_white <- mld  %>% filter(HISPAN == 0 & BLACK == 0) %>%
+#                         select(-BLACK,-HISPAN)
+```
+
+
+
+```{r results='asis'}
+
+# # test create table for white black and hispanic logit model
+# whitemodel = glm(APPROVE ~., data = mld_white, 
+#                  family = "binomial" )
+# wmodel_tab<- as.data.frame(summary(whitemodel)$coefficients)
+# wmodel_tab$oddratio <- exp(coef(whitemodel))
+# round(wmodel_tab, 4)
+# 
+# whitepropit <- glm(APPROVE ~., data = mld_white, 
+#                  family = "binomial" (link = "probit"))
+# #black model
+# blackmodel = glm(APPROVE ~., data = mld_black, 
+#                  family = "binomial")
+# 
+# bmodel_tab<- as.data.frame(summary(blackmodel)$coefficients)
+# bmodel_tab$oddratio <- exp(coef(blackmodel))
+# round(bmodel_tab, 4)
+# 
+# blackpropit <- glm(APPROVE ~., data = mld_black, 
+#                  family = "binomial" (link = "probit"))
+# #HIspan model
+# hispanmodel = glm(APPROVE ~., data = mld_hispan, 
+#                  family = "binomial")
+# 
+# hmodel_tab<- as.data.frame(summary(hispanmodel)$coefficients)
+# hmodel_tab$oddratio <- exp(coef(hispanmodel))
+# round(hmodel_tab, 4)
+# 
+# hispanpropit <- glm(APPROVE ~., data = mld_hispan, 
+#                  family = "binomial" (link = "probit"))
+# 
+# 
+# estimatelogit<- cbind(wmodel_tab[,c("Estimate","Std. Error", "oddratio")],
+#                     bmodel_tab[,c("Estimate","Std. Error", "oddratio")],
+#                     hmodel_tab[,c("Estimate","Std. Error", "oddratio")])
+# 
+# round(estimatelogit,4) %>%
+#   kable() %>%
+#   kable_styling(c("bordered"), position = "center", full_width = FALSE) %>%
+#   add_header_above(c(" ", "White" = 3, "Black" = 3, "Hispan" = 3))
+# 
+# estimatelogit
+# 
+# estimateprobit <- cbind(as.data.frame(summary(whitepropit)$coefficients)[,c("Estimate","Std. Error", "Pr(>|z|)")],
+#                         as.data.frame(summary(blackpropit)$coefficients)[,c("Estimate","Std. Error", "Pr(>|z|)")],
+#                         as.data.frame(summary(hispanpropit)$coefficients)[,c("Estimate","Std. Error", "Pr(>|z|)")])
+# 
+# round(estimateprobit,4)%>%
+#   kable() %>%
+#   kable_styling(c("bordered"), position = "center", full_width = FALSE) %>%
+#   add_header_above(c(" ", "White" = 3, "Black" = 3, "Hispan" = 3))
+```
+
+
+
+```{r}
+# #White - married - guideline
+# wprototype1 <- data.frame(MARRIED = "1", GDLIN = "1", OBRAT = meanOBRAT,  LOANPRC = meanLNPRC)
+# #White - married - no guideline
+# wprototype2 <- data.frame(MARRIED = "1", GDLIN = "0", OBRAT = meanOBRAT,  LOANPRC = meanLNPRC)
+# #White - singel - guideline
+# wprototype3 <- data.frame(MARRIED = "0", GDLIN = "1", OBRAT = meanOBRAT,  LOANPRC = meanLNPRC)
+# #White - single - no guideline
+# wprototype4 <- data.frame(MARRIED = "0", GDLIN = "0", OBRAT = meanOBRAT,  LOANPRC = meanLNPRC)
+# 
+# #Black - married - guideline
+# bprototype5 <- data.frame(MARRIED = "1", GDLIN = "1", OBRAT= meanOBRAT,  LOANPRC = meanLNPRC)
+# #Black - married - no guideline
+# bprototype6 <- data.frame(MARRIED = "1", GDLIN = "0", OBRAT=meanOBRAT,  LOANPRC = meanLNPRC)
+# #Black - singel - guideline
+# bprototype7 <- data.frame(MARRIED = "0", GDLIN = "1", OBRAT=meanOBRAT,  LOANPRC = meanLNPRC)
+# #Black - single - no guideline
+# bprototype8 <- data.frame(MARRIED = "0", GDLIN = "0", OBRAT=meanOBRAT,  LOANPRC = meanLNPRC)
+# 
+# 
+# #hispan - married - guideline
+# hprototype9 <- data.frame(MARRIED = "1", GDLIN = "1", OBRAT=meanOBRAT,  LOANPRC = meanLNPRC)
+# #hispan - married - no guideline
+# hprototype10 <- data.frame(MARRIED = "1", GDLIN = "0", OBRAT=meanOBRAT, LOANPRC = meanLNPRC)
+# #hispan - singel - guideline
+# hprototype11 <- data.frame(MARRIED = "0", GDLIN = "1", OBRAT=meanOBRAT, LOANPRC = meanLNPRC)
+# #hispan - single - no guideline
+# hprototype12 <- data.frame(MARRIED = "0", GDLIN = "0", OBRAT=meanOBRAT,  LOANPRC = meanLNPRC)
+```
+
+```{r}
+# wprototype1$logitprob <- predict(whitemodel, newdata = wprototype1, type ="response")
+# 
+# wprototype2$logitprob <- predict(whitemodel, newdata = wprototype2, type ="response")
+# 
+# wprototype3$logitprob <- predict(whitemodel, newdata = wprototype3, type ="response")
+# 
+# wprototype4$logitprob <- predict(whitemodel, newdata = wprototype4, type ="response")
+# 
+# bprototype5$logitprob <- predict(blackmodel, newdata = bprototype5, type ="response")
+# 
+# bprototype6$logitprob <- predict(blackmodel, newdata = bprototype6, type ="response")
+# 
+# bprototype7$logitprob <- predict(blackmodel, newdata = bprototype7, type ="response")
+# 
+# bprototype8$logitprob <- predict(blackmodel, newdata = bprototype8, type ="response")
+# 
+# hprototype9$logitprob <- predict(hispanmodel, newdata = hprototype9, type ="response")
+# 
+# hprototype10$logitprob <- predict(hispanmodel, newdata = hprototype10, type ="response")
+# 
+# hprototype11$logitprob <- predict(hispanmodel, newdata = hprototype11, type ="response")
+# 
+# hprototype12$logitprob <- predict(hispanmodel, newdata = hprototype12, type ="response")
+```
+
+```{r}
+# wprototype1$probitprob <- predict(whitepropit, newdata = wprototype1, type ="response")
+# 
+# wprototype2$probitprob <- predict(whitepropit, newdata = wprototype2, type ="response")
+# 
+# wprototype3$probitprob <- predict(whitepropit, newdata = wprototype3, type ="response")
+# 
+# wprototype4$probitprob <- predict(whitepropit, newdata = wprototype4, type ="response")
+# 
+# bprototype5$probitprob <- predict(blackpropit, newdata = bprototype5, type ="response")
+# 
+# bprototype6$probitprob <- predict(blackpropit, newdata = bprototype6, type ="response")
+# 
+# bprototype7$probitprob <- predict(blackpropit, newdata = bprototype7, type ="response")
+# 
+# bprototype8$probitprob <- predict(blackpropit, newdata = bprototype8, type ="response")
+# 
+# hprototype9$probitprob <- predict(hispanpropit, newdata = hprototype9, type ="response")
+# 
+# hprototype10$probitprob <- predict(hispanpropit, newdata = hprototype10, type ="response")
+# 
+# hprototype11$probitprob <- predict(hispanpropit, newdata = hprototype11, type ="response")
+# 
+# hprototype12$probitprob <- predict(hispanpropit, newdata = hprototype12, type ="response")
+```
+
+```{r}
+# logisepestimate <- rbind(wprototype1,
+#                           wprototype2,
+#                           wprototype3,
+#                           wprototype4,
+#                           bprototype5,
+#                           bprototype6,
+#                           bprototype7,
+#                           bprototype8,
+#                           hprototype9,
+#                           hprototype10,
+#                           hprototype11,
+#                           hprototype12)
+# logisepestimate
+```
+
+
+
+```{r}
+mld %>%
+      filter(APPROVE == 1, GDLIN == 0)
+```
+
