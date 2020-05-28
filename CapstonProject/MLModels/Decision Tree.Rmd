@@ -1,0 +1,62 @@
+---
+title: "Decision Tree"
+output: html_notebook
+---
+
+```{r}
+
+#Install the required packages and load them
+# If "rpart" and rpart.plot are already installed, skip installing them. 
+install.packages("rpart")
+install.packages("rpart.plot")
+
+library(rpart)
+library(rpart.plot)
+
+```
+
+```{r}
+conn <- odbcConnect("oitap22") 
+dfmn <- sqlQuery(conn,"select * from [19su5510_angelovp].[dbo].[groupeddatafull]") 
+
+fullds <- dfmn %>% select( - ParcelNumber, -AppraisalAccountType, -AppraisalDate, - BuildingID, -AccountType, -PropertyType, -Condition, -Quality, -Zipcode, -Latitude, -Longtitude, -PercentComplete, -LandNetSquareFeet, -TaxableValuePriorYear, -YearBuilt, -YearRemodeled, -SquareFeet, -LandGrossSquareFeet, -PhysicalAge, -Buildings)  
+fullds[is.na(fullds)] <- 0
+
+set.seed(12) #A seed can be any number you like.
+rs <- sample(nrow(dfmn), .8*nrow(dfmn))
+
+Training <-fullds[rs,]
+Testing <- fullds[-rs,]
+```
+
+```{r}
+# Save typing to directly access the variable names without specifying data.frame name
+
+attach(Training)
+
+# Build a decision tree using all columns.
+
+dtm <- rpart(TaxableValueCurrentYear ~., Training,method="anova")
+rpart.plot(dtm)
+rpart.plot(dtm, extra=1) #Numbers
+
+```
+
+```{r}
+# Predict a vote for legislations using the data for testing.
+
+p1 <- predict(dtm,Testing, type ="matrix")
+#p2 <- predict(dtm,Testing, type ="vector")
+# Build a classification (or confusion) matrix
+table (Testing$TaxableValueCurrentYear, Predict=p1)
+# Use caret package for calculating evaluation ratios
+install.packages("caret")
+library(caret)
+confusionMatrix(p1,Testing$TaxableValueCurrentYear)
+# The first argument contains the predicted data.
+# while the second argument actual data.
+# See the manual for how the ratios are calculated.
+?confusionMatrix
+
+```
+

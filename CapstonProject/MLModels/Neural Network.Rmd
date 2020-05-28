@@ -1,0 +1,105 @@
+---
+title: "Neural Network - Pierce County Housing"
+output: html_notebook
+---
+
+
+```{r}
+library(tidyverse) 
+
+library(RODBC) 
+
+library(stringr) 
+
+library(psych)
+
+install.packages("neuralnet")
+library(neuralnet)
+
+conn <- odbcConnect("oitap22") 
+
+ 
+
+dfmn <- sqlQuery(conn,"select * from [19su5510_angelovp].[dbo].[groupeddatafull]") 
+
+  
+
+apply(dfmn,2,range) 
+
+fullds <- dfmn %>% select( - ParcelNumber, -AppraisalAccountType, -AppraisalDate, - BuildingID, -AccountType, -PropertyType, -Condition, -Quality)  
+
+  
+
+maxVals <- apply(fullds, 2,max) 
+
+minVals <- apply(fullds, 2,min) 
+
+dfmnN <- as.data.frame(scale(fullds , center = minVals, scale = (maxVals-minVals))) 
+```
+```{r}
+#Partition the dataset for training and testing
+set.seed(1234) #A seed can be any number you like.
+rs <- sample(nrow(dfmnN), .8*nrow(dfmnN))
+
+Training <-dfmn[rs,]
+Testing <- dfmn[-rs,]
+
+TrainingN <- dfmnN[rs,]
+TestingN <- dfmnN[-rs,]
+attach(TrainingN)
+
+colnames(TrainingN)
+TrainingN[is.na(TrainingN)] <- 0
+TestingN[is.na(TestingN)] <- 0
+```
+
+```{r}
+#A model with 4 nodes on the hidden layer
+nm1 <- neuralnet(TaxableValueCurrentYear~Buildings+LandGrossSquareFeet+SquareFeet+PhysicalAge+YearBuilt+YearRemodeled+TaxableValuePriorYear+DrugCrime+Homicide+OtherCrime+PersonalCrime+PropertyCrime, hidden = c(4), data=TrainingN)
+plot(nm1)
+
+
+```
+```{r}
+#A model with 7 nodes on the hidden layer
+nm2 <- neuralnet(TaxableValueCurrentYear~Buildings+LandGrossSquareFeet+SquareFeet+PhysicalAge+YearBuilt+YearRemodeled+TaxableValuePriorYear+DrugCrime+Homicide+OtherCrime+PersonalCrime+PropertyCrime, hidden = c(7), data=TrainingN)
+plot(nm2)
+```
+```{r}
+#A model with 7 and 2 nodes on the first and second hidden layer
+nm3 <- neuralnet(TaxableValueCurrentYear~Buildings+LandGrossSquareFeet+SquareFeet+PhysicalAge+YearBuilt+YearRemodeled+TaxableValuePriorYear+DrugCrime+Homicide+OtherCrime+PersonalCrime+PropertyCrime, hidden = c(7,2), data=TrainingN)
+plot(nm3)
+```
+
+```{r}
+# Provide predicted values for the testing data using the three models created abov
+
+testPred1 <- compute(nm1,TestingN[,c('Buildings','LandGrossSquareFeet','SquareFeet','PhysicalAge','YearBuilt','YearRemodeled','TaxableValuePriorYear','DrugCrime','Homicide','OtherCrime','PersonalCrime','PropertyCrime')])
+#Calcuate prediction errors using MSE - Mean Squared Error
+mse1 <- sum((testPred1$net.result- TestingN$TaxableValueCurrentYear)^2)/nrow(TestingN)
+mse1 
+
+testPred2 <- compute(nm2,TestingN[,c('Buildings','LandGrossSquareFeet','SquareFeet','PhysicalAge','YearBuilt','YearRemodeled','TaxableValuePriorYear','DrugCrime','Homicide','OtherCrime','PersonalCrime','PropertyCrime')])
+mse2 <- sum((testPred2$net.result- TestingN$TaxableValueCurrentYear)^2)/nrow(TestingN)
+mse2
+
+testPred3 <- compute(nm3,TestingN[,c('Buildings','LandGrossSquareFeet','SquareFeet','PhysicalAge','YearBuilt','YearRemodeled','TaxableValuePriorYear','DrugCrime','Homicide','OtherCrime','PersonalCrime','PropertyCrime')])
+mse3 <- sum((testPred3$net.result- TestingN$TaxableValueCurrentYear)^2)/nrow(TestingN)
+mse3
+#Compare the MSEs for the three models
+mse1; mse2; mse3
+
+```
+```{r}
+#Denormalize the predicted values to the original scale
+
+actualTestPred2 <- testPred2$net.result * (max(dfmn[,'TaxableValueCurrentYear'])-min(dfmn[,'TaxableValueCurrentYear'])) + min(dfmn[,'TaxableValueCurrentYear'])
+head(Testing[,'TaxableValueCurrentYear'],10)
+head(actualTestPred2,10)
+#Calculate the MSE using actual (original) values
+mseActual1 <- sum((actualTestPred2- Testing [,'TaxableValueCurrentYear'])^2)/nrow(Testing) #Calculation of mse using the original scale
+mseActual1
+sqrt (mseActual1)
+
+```
+

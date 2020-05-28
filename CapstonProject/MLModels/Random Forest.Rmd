@@ -1,0 +1,57 @@
+---
+title: "Random Forest"
+output: html_notebook
+---
+ 
+```{r}
+install.packages("randomForest")
+library(randomForest)
+
+```
+
+```{r}
+conn <- odbcConnect("oitap22") 
+dfmn <- sqlQuery(conn,"select * from [19su5510_angelovp].[dbo].[groupeddatafull]") 
+
+fullds <- dfmn %>% select( - ParcelNumber, -AppraisalAccountType, -AppraisalDate, - BuildingID, -AccountType, -PropertyType, -Condition, -Quality, -Zipcode, -Latitude, -Longtitude, -PercentComplete, -LandNetSquareFeet, -TaxableValuePriorYear, -YearBuilt, -YearRemodeled, -SquareFeet, -LandGrossSquareFeet, -PhysicalAge, -Buildings)  
+fullds[is.na(fullds)] <- 0
+
+set.seed(1234) #A seed can be any number you like.
+rs <- sample(nrow(dfmn), .8*nrow(dfmn))
+
+Training <-fullds[rs,]
+Testing <- fullds[-rs,]
+  
+```
+
+```{r}
+# Save typing to directly access the variable names without specifying the data.frame name
+
+attach(Training)
+
+# Build a random forest model.
+
+rfm <- randomForest(TaxableValueCurrentYear ~., data = Training)
+print(rfm)
+
+mse <- sum((rfm$predicted - Training$TaxableValueCurrentYear)^2)/nrow(Training)
+sqrt(mse)
+plot(rfm)
+
+
+sapply(Testing, function(x) sum(is.na(x))) 
+# Testing 
+print(Testing)
+p1 <- predict(rfm, Testing[,-TaxableValueCurrentYear])
+mse2 <- sum((p1 - Testing$TaxableValueCurrentYear)^2)/nrow(Testing)
+mse2
+
+#Variable importance - Information Gain
+
+varImpPlot(rfm)
+importance(rfm)
+
+
+
+```
+
