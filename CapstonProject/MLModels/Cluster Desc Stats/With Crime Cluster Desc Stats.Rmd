@@ -1,0 +1,54 @@
+---
+title: "Cluster Descriptive Statistics-With Crime"
+output: html_notebook
+---
+```{r}
+library(tidyverse) 
+
+library(RODBC) 
+
+library(stringr) 
+
+library(psych)
+
+install.packages("neuralnet")
+library(neuralnet)
+
+conn <- odbcConnect("oitap22")
+```
+
+
+```{r}
+ 
+
+ 
+####
+# model with clustered data without crime
+#===================================
+dfmn <- sqlQuery(conn,"select * from [19su5510_angelovp].[dbo].[FinalDataClusterWithCrime]") 
+
+
+apply(dfmn,2,range) 
+
+fullds <- dfmn %>% select(-Condition, -Quality,-SaleDate, -PersonalCrime, -DrugCrime, -OtherCrime, -Homicide, -PropertyCrime)  %>%
+                    mutate(cluster = as.numeric(substr(`Cluster`,8,9))) %>% 
+                    select(-`Cluster`)
+    
+
+##### Normalize data  
+
+maxVals <- apply(fullds, 2,max) 
+
+minVals <- apply(fullds, 2,min) 
+
+fulldsCluster1 <- fullds %>% filter(cluster ==1)
+
+fulldsCluster2 <- fullds %>% filter(cluster ==2)
+
+fulldsCluster3 <- fullds %>% filter(cluster ==3)
+
+summary(fulldsCluster1)
+summary(fulldsCluster2)
+summary(fulldsCluster3)
+
+```

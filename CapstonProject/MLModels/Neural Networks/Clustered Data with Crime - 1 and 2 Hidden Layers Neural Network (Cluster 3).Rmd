@@ -1,0 +1,131 @@
+---
+title: "Neural Network - Pierce County Housing"
+output: html_notebook
+---
+```{r}
+library(tidyverse) 
+
+library(RODBC) 
+
+library(stringr) 
+
+library(psych)
+
+install.packages("neuralnet")
+library(neuralnet)
+
+conn <- odbcConnect("oitap22")
+```
+
+
+```{r}
+ 
+
+ 
+####
+# model with clustered data with crime
+#===================================
+dfmn <- sqlQuery(conn,"select * from [19su5510_angelovp].[dbo].[FinalDataClusterWithCrime]") 
+
+
+apply(dfmn,2,range) 
+
+fullds <- dfmn %>% select(-Condition, -Quality,-SaleDate)  %>%
+                    mutate(cluster = as.numeric(substr(`Cluster`,8,9))) %>% 
+                    select(-`Cluster`)
+    
+
+##### Normalize data  
+
+maxVals <- apply(fullds, 2,max) 
+
+minVals <- apply(fullds, 2,min) 
+
+fulldsCluster1 <- fullds %>% filter(cluster ==1)
+
+fulldsCluster2 <- fullds %>% filter(cluster ==2)
+
+fulldsCluster3 <- fullds %>% filter(cluster ==3)
+
+dfmnNCluster3 <- as.data.frame(scale(fulldsCluster3 , center = minVals, scale = (maxVals-minVals)))
+
+
+```
+
+```{r}
+#Partition the dataset for training and testing
+set.seed(1234) #A seed can be any number you like.
+
+# cluster 3
+rs <- sample(nrow(dfmnNCluster3), .8*nrow(dfmnNCluster3))
+
+Training <-fulldsCluster3[rs,]
+Testing <- fulldsCluster3[-rs,]
+
+TrainingN <- dfmnNCluster3[rs,]
+TestingN <- dfmnNCluster3[-rs,]
+attach(TrainingN)
+
+colnames(TrainingN)
+TrainingN[is.na(TrainingN)] <- 0
+TestingN[is.na(TestingN)] <- 0
+```
+
+```{r}
+# cluster 3
+#A model with 10 nodes on the hidden layer
+
+nm1 <- neuralnet(SalePrice~Buildings+LandNetSquareFeet+SquareFeet+PhysicalAge+YearBuilt+DrugCrime+Homicide+OtherCrime+PersonalCrime+PropertyCrime, hidden = c(10), data=TrainingN)
+plot(nm1)
+
+#testing 
+testPred1 <- compute(nm1,TestingN[,c('Buildings','LandNetSquareFeet','SquareFeet','PhysicalAge','YearBuilt','DrugCrime','Homicide','OtherCrime','PersonalCrime','PropertyCrime')])
+#Calcuate prediction errors using MSE - Mean Squared Error
+mse1 <- sum((testPred1$net.result- TestingN$SalePrice)^2)/nrow(TestingN)
+mse1 
+
+mae1 <- sum(abs(testPred1$net.result- TestingN$SalePrice))/nrow(TestingN)
+mae1
+
+################################
+actualTestPred1 <- testPred1$net.result * (max(fulldsCluster3[,'SalePrice'])-min(fulldsCluster3[,'SalePrice'])) + min(fulldsCluster3[,'SalePrice'])
+
+#Calculate the MSE using actual (original) values
+mseActual1 <- sum((actualTestPred1- Testing [,'SalePrice'])^2)/nrow(Testing) #Calculation of mse using the original scale
+mseActual1
+sqrt (mseActual1)
+
+maeActual1 <- sum(abs(actualTestPred1- Testing [,'SalePrice']))/nrow(Testing) 
+maeActual1
+
+```
+
+```{r}
+# cluster 3
+#A model with 10,15 nodes on 2 hidden layer
+
+nm42 <- neuralnet(SalePrice~Buildings+LandNetSquareFeet+SquareFeet+PhysicalAge+YearBuilt+DrugCrime+Homicide+OtherCrime+PersonalCrime+PropertyCrime, hidden = c(10,15), data=TrainingN)
+plot(nm42)
+
+#testing 
+testPred42 <- compute(nm42,TestingN[,c('Buildings','LandNetSquareFeet','SquareFeet','PhysicalAge','YearBuilt','DrugCrime','Homicide','OtherCrime','PersonalCrime','PropertyCrime')])
+#Calcuate prediction errors using MSE - Mean Squared Error
+mse42 <- sum((testPred42$net.result- TestingN$SalePrice)^2)/nrow(TestingN)
+mse42
+
+mae42 <- sum(abs(testPred42$net.result- TestingN$SalePrice))/nrow(TestingN)
+mae42
+
+################################
+actualTestPred42 <- testPred42$net.result * (max(fulldsCluster3[,'SalePrice'])-min(fulldsCluster3[,'SalePrice'])) + min(fulldsCluster3[,'SalePrice'])
+
+#Calculate the MSE using actual (original) values
+mseActual42 <- sum((actualTestPred42- Testing [,'SalePrice'])^2)/nrow(Testing) #Calculation of mse using the original scale
+mseActual42
+sqrt (mseActual42)
+
+maeActual42 <- sum(abs(actualTestPred42- Testing [,'SalePrice']))/nrow(Testing) 
+maeActual42
+
+
+```
