@@ -1,6 +1,8 @@
 # Fake Review Detection
 
-## Independent Study
-## Seattle University
-### Instructor: Dr B.Kim
-### Status: completed
+ Independent Study
+ Seattle University
+### Instructor: 
+Dr B.Kim
+### Status: 
+completed
