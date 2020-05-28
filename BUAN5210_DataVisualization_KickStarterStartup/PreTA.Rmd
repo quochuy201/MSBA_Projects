@@ -1,0 +1,1234 @@
+---
+title: "Final Project - EDA"
+author: "Huy Le"
+date: "`r format(Sys.time(), '%B %d, %Y')`"
+output:
+  html_document:
+    df_print: paged
+    toc: true
+    toc_float: true
+---
+
+1 Commented header  
+=========================================
+
+```{r echo = TRUE}
+# Course: BUAN 5210
+# Title: Final Project
+# Purpose: Technical Appendix
+# Date: 2019-03-14
+# Author: Huy LE
+```
+
+2 Clear environment
+=========================================
+
+```{r warning=FALSE}
+# Clear environment of variables and functions
+rm(list = ls(all = TRUE)) 
+
+# Clear environmet of packages
+if(is.null(sessionInfo()$otherPkgs) == FALSE)lapply(paste("package:", names(sessionInfo()$otherPkgs), sep=""), detach, character.only = TRUE, unload = TRUE)
+
+```
+
+3 Load packages
+=========================================
+
+
+```{r warning = FALSE, message = FALSE}
+# Load libraries
+library(tidyverse)
+library(GGally)
+library(gridExtra)
+library(kableExtra)
+library(janitor)
+library(stringr)
+library(knitr)
+library(htmlTable)
+library(lubridate)
+library(aod)
+library(sjPlot)
+library(MultinomialCI)
+library(Hmisc)
+library(ggrepel)
+library(rworldmap)
+```
+
+
+4. Load data 
+=========================================
+
+```{r}
+# Load data 
+kick <- read.csv("./ks-projects-201801.csv")
+
+# Examine data structure 
+str(kick)
+```
++ 378661 Obs, 15 variables
++ 23 countries, 14 currencies, 159 category, 15 main categories, 6 state.
+
+## 4.1 Tidying data
+```{r}
+#check na value
+sapply(kick, function(x) sum(is.na(x)))
+
+sapply(kick, function(x) sum(is.infinite(x)))
+```
++ There appears to only be N/A values for usd.pledged. We actually don’t need that column since we’ll be using usd_pledged_real instead, so let’s get rid of it and rename usd_pledged_real to usd.pledged. Likewise, we’ll do the same with usd_goal_real and simply name it usd.goal.
+
+```{r}
+#check odds value
+summary(kick)
+
+```
+
++ Dataset from 2009 to 2018. But I only analyse data in 2017
++ convert launched, deadline to date type.
++ uds_plefged_real, and usd_goal_real are the real converstion of pledged and goal to usd. we will use these instead pledged and goal.
++ Some project set up the goal too low (0.01 usd or 10 usd), it more likely to success than other. I will limit projects with usd.goal > 1000 usd.
++ Variable "State" indicate the status of a project Failed, Sccessful, suspended, undefined. 
+    + To conduct regression model, I will restrict those projects were canceled or suspended.
++ I want to know duration of a project and how much a project succesful over expectation.
+    + I will create new fields. Duration = Deadline - launch date (days), ratio = usd.pledged / usd.goal.
+    + The maximum for project length on Kickstater is 60 days but there might be some more.
+
+```{r}
+#format date as yyyy-mm-dd
+#filter data 
+dat <- kick %>%
+        select(-usd.pledged, - name,goal, - pledged) %>%
+        rename(usd.pledged = usd_pledged_real, 
+               usd.goal = usd_goal_real,
+               #change the name of category and main_category for easy coding
+               category = main_category ,
+               subcategory = category) %>%
+# convert character into factor, data
+        mutate(ID = as.factor(ID),
+               deadline = as.Date(deadline),
+               launched = as.Date(launched)) %>%
+        mutate(duration = as.numeric(deadline -launched),
+               ratio = round(usd.pledged/usd.goal,2),
+               year = format(launched, "%Y"),
+               month =  format(launched, "%m")) %>%
+#filter data follow selection criteria
+        filter( launched >= as.Date("2017-01-01") & launched <= as.Date("2017-12-31") &
+                usd.goal >= 1000 & 
+                country !='N,0"' &
+                duration <= 60 &
+                (state == "successful" | state == "failed"))%>%
+        mutate(state =  factor(state, levels = c("failed", "successful")))
+
+
+#Check duplicate data
+sum(duplicated(dat$ID))
+```
+
++ Now, the data is look better
+
+5. Basic EDA
+=========================================
+## 5.1 Univariate Analysis
+
+### 5.1.1 Non-graphical Analysis
+```{r}
+# descriptive statistics
+summary(dat)
+```
++ Observation from the data:
+    + 325778 obs, 16 variable after filter.
+    + There are 07 numeric variables: goal, pledged, backers, usd.pledged, usd.goal, duration and, ratio. All of them are right skewned
+    + Most of projects are in Games 4604, Technology 4455, and Design 4106.
+    + US is the country has most projects.
+    + there are 22189 projects failed vs 14353 successful.
+  
+#### Frequency table
+```{r}
+#Create function for frequency tables 
+count_table <- function(x,colname){
+   x = enquo(x)
+   dat %>%
+      tabyl(!!x) %>%
+      adorn_totals()%>%
+      adorn_pct_formatting(digits = 0 ) %>%
+   kable(
+      digits = 2,
+      align = c("l","c","c"),
+      col.names = c(colname,"Count","Percent")) %>%
+  kable_styling(c("bordered"), position = "center", full_width = F)
+   }
+
+#Make count tables for univariate variables 
+count_table(category,"Category")
+```
+
+- Game has most project, account for 13%, follow by Technology 12%, Desgin 11%, Film & Video 11%.
+- The leasts are Dance, Journalism with 1%
+
+#### Now I'll do the same thing for subcategory. There are 159  subcategory, I will do with just top 10 subcategories
+```{r}
+dat %>%
+    group_by(subcategory) %>%
+    summarise(count = n()) %>%
+    mutate(percent = round(count /sum(count)*100,2))%>% 
+    arrange(desc(count)) %>%
+    head(10) %>%
+    kable() %>%
+    kable_styling(c("bordered"), position = "center", full_width = F)
+```
+
++ Product Design (Design main category) hase most project 3288.
+
+#### Currency
+```{r}
+count_table(currency,"Currency")
+```
+
++ Most projects were launched in USD 65% followed by EUR with 11%, GBP 10%, these orthers were not subtaintial
+
+#### Country
+```{r}
+count_table(country,"Country")
+```
+
++ The proportion in country is similar with currency.
+
+
+#### Project status
+```{r}
+count_table(state,"Status")
+```
+
++ 61% projects was failed, 39% is successfull
+
+
+### 5.1.2 Graphical Analysis
+#### 5.1.2.1 Categorical variables
+
+#### Create functions
+```{r}
+#Count bargraph 
+count_bargraph <- function(plot) {
+ plot + 
+    geom_bar(position = "dodge") +
+    theme_bw() + 
+    theme(panel.border = element_blank(), 
+                       panel.grid.major = element_blank(),
+                       panel.grid.minor = element_blank()) + 
+    labs(y ="Count")
+}
+
+#Count histogram
+count_hist<- function(plot){
+  plot + geom_histogram(bins = 52)+
+    theme_bw() + 
+    theme(panel.border = element_blank(), 
+                       panel.grid.major = element_blank(),
+                       panel.grid.minor = element_blank()) + 
+    labs(y ="Count")
+}
+
+# nrow(dat[dat$usd.pledged < 2000,])
+# dat %>%
+#   mutate(year)
+# ggplot(mapping =aes(x=format(launched,"%Y"))) +
+#   geom_line(stat='count')
+# 
+# hist(dat$usd.goal)
+```
+
+#### Summary graph
+```{r}
+grid.arrange(
+  count_bargraph(ggplot(dat, aes(category))) + 
+                          xlab("Category") + 
+                          coord_flip(),
+  count_bargraph(ggplot(dat, aes(country))) + 
+                          xlab("country")+ 
+                            coord_flip(),
+  count_bargraph(ggplot(dat, aes(currency))) + 
+                          xlab("Currency")+ 
+                            coord_flip(), 
+  count_bargraph(ggplot(dat, aes(state))) + 
+                          xlab("State") + coord_flip(),
+  nrow = 2)
+```
+
+
+
+#### 5.1.2.2 Quantitive variable
+```{r warning = FALSE}
+#Project frequency in continuous variable
+
+grid.arrange(
+  count_hist(ggplot(dat, aes(duration))), #uration
+  count_hist(ggplot(dat, aes(usd.pledged))+ xlim(1000, 100000)), #total usd amount pledge
+  count_hist(ggplot(dat, aes(usd.goal))+ xlim(1000, 100000)), #Minimum goal
+  count_hist(ggplot(dat, aes(ratio))+ xlim(0, 4)), #ratio = pledged/goal
+  count_hist(ggplot(dat, aes(backers))+ xlim(0, 50)), #number of backer
+nrow = 3
+)
+
+# dat %>% ggplot(aes(x="", y = usd.pledged)) +
+#         geom_boxplot() +
+#         ylim(1000, 100000)
+
+```
+
++ Observation of data:
+    + Most of project set goal <25,000 usd, number of projects have goal >100000 is too small to present on the graph, I will use a different graph.
+    + there is smiliar trend with usd pledged, ratio and number of backer.
+    + most projects do not recieve support.
+    + 60 days is the maximum lenght for a project, this is kickstater rule. Most of project set duration as 30 days.
+    + USD.Goal, USD pledged and backers have similar pattern.
+*Question:*
++ There are many project has small number of backer, Are all of them failed?
++ Are Duration, minimum goal and number of backers influence to success rate of a project?
++ Is the effect different by main category?
+
+
+## 5.2 Multivariate Analysis
+### 5.2.1 Non-graphical Analysis
+#### 5.2.1.1 Categorical variables
+```{r}
+#Function for table
+count_crosstable <- function(x, y, name, cols){
+   x = enquo(x)
+   y = enquo(y)
+   dat %>%
+      tabyl(!!x, !!y) %>%
+      adorn_totals(where = c('row','col')) %>%
+      #adorn_pct_formatting(digits = 0 ) %>%
+   kable(
+     digits = 2,
+      format = "html",
+      align = c("l","c","c","c","c"),
+      caption = name,
+      col.names = cols
+    )%>%
+  kable_styling(full_width = F, c("bordered"), position = "center")
+}
+prop_crosstable <- function(x, y, name, cols, denom = "all"){
+   x = enquo(x)
+   y = enquo(y)
+   dat %>%
+      tabyl(!!x, !!y) %>%
+      adorn_totals(where = c('row','col')) %>%
+      adorn_percentages(denominator = denom)%>%
+      adorn_pct_formatting(digits = 0 ) %>%
+   kable(
+     digits = 2,
+      format = "html",
+      align = c("l","c","c","c","c"),
+      caption = name,
+      col.names = cols
+    )%>%
+  kable_styling(full_width = F, c("bordered"), position = "center")
+}
+
+
+```
+
+##### Main category - Subcategory
+```{r}
+#Main Category - sub categoty 
+dat %>%
+    select(subcategory, category) %>% distinct() %>%
+    group_by(category) %>%
+    summarise(Num_subcategory = n()) %>%
+    kable(col.names = c("Category", "Subcategory")) %>%
+    kable_styling(full_width = F,c("bordered"), position = "center")
+```
++ Film & video is the category has most subcategory, the least cateogry is Dance.
+
+##### Successful and Unsuccessful
+```{r}
+#Successful vs failed by category
+prop_crosstable(category, state,"Successfull vs Failed", c("Category", "Failed", "Successful", "Total"), "row")
+
+```
+
+
++ Dance, Theater, and  Comics are categories have high percentage of successful project
++ While popular categories like Film & Video, design, game have lower percentage of successful project. Techonolofy and crafts is the lowest (~20%)
+
+#### 5.2.1.2 Quantitative variables
+```{r}
+#
+average_summarise <- function(x, y, tablename) {
+   x = enquo(x)
+   y = enquo(y)
+   dat %>%
+      select(!!x, !!y) %>%
+      group_by(!!x) %>%
+      summarise(Mean = mean(!!y), Min = min(!!y), max = max(!!y), sd = sd(!!y) ) %>%
+      #adorn_pct_formatting(digits = 0 ) %>%
+   kable(
+     digits = 2,
+      format = "html",
+      align = c("l","c","c","c","c"),
+      caption = tablename
+    )%>%
+  kable_styling(full_width = F, c("bordered"), position = "center")
+  
+}
+
+# Usd pledged in category
+average_summarise(category, usd.pledged, "USD pledged in Category")
+```
+
+##### Usd goal in category
+```{r}
+#Usd.goal by category
+average_summarise(category, usd.goal, "USD goal in Category")
+```
+
+
+##### Average Number of backers, USD pledged, USD goal and ratio in category
+```{r}
+dat %>% select(category, backers, usd.pledged, usd.goal) %>%
+        group_by(category) %>%
+        summarise(Avg_backers = round(mean(backers),0), 
+                  Avg_pledged =  round(mean(usd.pledged),0), 
+                  Avg_goal =  round(mean(usd.goal),0), 
+                  Avg_ratio =  round(Avg_pledged/Avg_goal,2)) %>%
+        arrange(desc(Avg_ratio)) %>%
+        kable(
+           digits = 2,
+            format = "html",
+            align = c("l","c","c","c","c"),
+            caption = "Averages by Categories",
+            col.names = c("Category", "Average Backers", "Average Pledged", "Average goal", "Average Ratio")
+          )%>%
+        kable_styling(full_width = F, c("bordered"), position = "center")
+```
+
++ Games and Design have most backers , also highest ratio (Pledged amount/Goal)
+
+##### Correltaion between continuous variables
+```{r}
+ggpairs(dat, columns =  c("usd.pledged", "usd.goal", "duration", "ratio", "backers"))
+```
+
++ Duration, Backers and USD pledged have positive correlation
++ Ratio has negative correlation with duration and goald.
+    + Are higher goal and longer duration associated to lower success rate?
+
+### 5.2.2 Graphical Analysis
+#### 5.2.2.1 What are popular project categories?
+##### Numer of Project by category
+```{r}
+dat %>%
+  group_by(category) %>%
+  summarise(count=n()) %>%
+  arrange(desc(count)) %>%
+  mutate(category = factor(category, levels=category)) %>%
+  ggplot( aes(category, count, fill = count)) + geom_bar(stat="identity") + 
+  ggtitle("Projects by Category") + xlab("Project Category") + ylab("Frequency") + 
+  geom_text(aes(label=count), vjust=-0.5, size = 3) + 
+  theme(plot.title=element_text(hjust=0.5), axis.title=element_text(size=12, face="bold"), 
+        axis.text.x=element_text(size=12, angle=90), legend.position="null") + 
+  scale_fill_gradient(low="#6baed6", high="#08306b")
+
+```
+
++ Game and Technology have more projects than other categories
+
+##### Success vs Failure
+```{r}
+# Successfull vs Failure by category
+ state.pct <-dat %>%
+  group_by(category, state) %>%
+  summarise(count=n()) %>%
+  mutate(pct=count/sum(count)) %>%
+  arrange(desc(state), pct) 
+  state.pct$category <-factor(state.pct$category, 
+                                  levels=state.pct$category[1:(nrow(state.pct)/2)])
+  state.pct %>% ggplot(aes(x=category, y= pct, fill = state)) + geom_bar(stat = "identity") + 
+  ggtitle("Success vs. Failure Rate by Project Category") + 
+  xlab("Project Category") + ylab("Percentage") + scale_y_continuous(labels = scales::percent) + 
+  scale_fill_discrete(name="Project Status", breaks=c("successful", "failed"),
+                      labels=c("Success", "Failure")) + 
+  geom_text(aes(label=paste0(round(pct*100,1),"%")), position=position_stack(vjust=0.5), 
+            colour="white", size=4) +  
+  theme_bw() +
+  theme(plot.title=element_text(hjust=0.5), axis.title=element_text(size=12, face="bold"), 
+        axis.text.x=element_text(size=10), legend.position="bottom", 
+        legend.title=element_text(size=10, face="bold")) + 
+  coord_flip() +
+  scale_fill_manual(values = c("#6baed6","#08519c"))
+
+```
+
++ Comics, Dance, Theater have the highest success rates and Technology, Crafts and Journalism have the lowest.
+    + It could be because of low risk.
++ Although number of Technology Projects is nearly to Games, but only 25% is success. Game have more than 50% are successful.
+
+##### Vaerage backers per project by category
+```{r}
+
+dat %>%
+  group_by(category) %>%
+  summarise(sumbackers = mean(backers)) %>%
+  arrange(desc(sumbackers)) %>%
+  mutate(category = factor(category, levels=category)) %>%
+  ggplot( aes(category, sumbackers, fill=sumbackers)) + geom_bar(stat="identity") + 
+  ggtitle("Which is the most interesting category?") + xlab("Project Category") + ylab("Average Backers") + 
+  geom_text(aes(label= round(sumbackers,0)), vjust=-0.5, size = 3) + 
+  theme(plot.title=element_text(hjust=0.5), axis.title=element_text(size=12, face="bold"), 
+        axis.text.x=element_text(size=12, angle=90), legend.position="null") + 
+  scale_fill_gradient(low="#6baed6", high= "#08519c")
+```
+
++ Game projects revceive many support from backers, incredibly higher than these others.
++ Number of backers of Game project is double to Technology as success rate. May it is the reason of success?
+
+
+#### 5.2.2.2 Minimum goal and funding amount
+##### Correlation Goal and Funding result
+Whether setup project goal affect to success?
+
+```{r}
+grid.arrange(
+  dat %>% filter(state =="successful") %>%
+  ggplot(aes(x= usd.goal/1000, y = usd.pledged/1000)) +
+  geom_point(alpha =0.4, size = 2, colour = "#3182bd") + 
+  ggtitle("Successful Project") + 
+  xlab("Project goal(1000 USD)") + ylab("Amount Pledged (1000 USD)") +
+  theme_bw() +
+  theme(panel.grid =element_blank()) +
+  theme(axis.ticks = element_blank()) +
+  theme(axis.line = element_line(colour = "black")) +
+  theme(panel.border = element_blank()),
+  dat %>% filter(state =="failed") %>%
+  ggplot(aes(x= usd.goal/1000, y = usd.pledged/1000)) +
+  geom_point(alpha =0.4, size = 2, colour = "#de2d26") + 
+  ggtitle("Failed Project") + 
+  xlab("Project goal (1000 USD)") + ylab("Amount Pledged (1000 USD)") +
+  theme_bw() +
+  theme(panel.grid =element_blank()) +
+  theme(axis.line = element_line(colour = "black")) +
+  theme(panel.border = element_blank()) +
+  xlim(0, 600),
+  nrow =1)
+```
+
++ Most projects set the goal too high are failed. While smaller goal project fund raise more
+    + Higher goal face more risk than lower goal
+
+##### Pledged amount vs number of backers
+```{r}
+dat %>% 
+  #filter(state =="successful") %>%
+  ggplot(aes(x=backers, y = usd.pledged/1000)) +
+  geom_point(alpha =0.4, size = 2, colour = "#3182bd") + 
+  geom_smooth( se =FALSE, colour = "#08306b")+
+  ggtitle("Successful Project") + 
+  xlab("Backers") + ylab("Amount Pledged (1000 USD)") +
+  theme_bw() +
+  theme(panel.grid =element_blank()) +
+  theme(axis.line = element_line(colour = "black")) +
+  theme(panel.border = element_blank())
+
+```
+
+##### Average project goal
+```{r}
+# 90% CI, get z-value for upper tail, use .95 since is one sided
+z <- qnorm(.95)
+
+dat %>%
+  group_by(category) %>%
+  summarise(avg = mean(usd.goal), 
+            projects = n(), 
+            sd =sd(usd.goal),
+            ci= z * sd/sqrt(projects)) %>%
+  arrange(desc(avg)) %>%
+  mutate(category = factor(category, levels = category)) %>%
+  ggplot( aes(category, avg/1000, fill = avg)) + geom_bar(stat="identity") + 
+  ggtitle("Average Project Goal") + xlab("Project Category") + ylab("Project Goal (1000 USD)") + 
+  geom_text(aes(label =  round( avg/1000, 0)), vjust = -2.5) + 
+  theme(panel.grid = element_blank()) +
+  theme(plot.title = element_text(hjust = 0.5), axis.title=element_text(size = 9, face = "bold"), 
+        axis.text.x = element_text(size = 12, angle = 90), legend.position = "null") + 
+  scale_fill_gradient(low ="#6baed6", high = "#08306b") +
+  geom_errorbar(aes(ymin = (avg - ci)/1000, ymax = (avg + ci)/1000), 
+                width = 0.2 )
+
+```
+
++ Film & Video, Art, and Technology set the highest average project goals. On the opposite side, we find Crafts, Dance, and Comics.
+
+##### Average amount pleged by category
+```{r}
+dat %>%
+  group_by(category) %>%
+  summarise(avg=mean(usd.pledged), projects=n(),
+            sd =sd(usd.pledged),
+            ci= z * sd/sqrt(projects)) %>%
+  arrange(desc(avg)) %>% 
+  mutate(category = factor(category, levels = category)) %>%
+  ggplot( aes(category, avg, fill=avg)) + geom_bar(stat="identity") + 
+  ggtitle("Average pledged Amount") + xlab("Project Category") + ylab("Average amount pledged (USD) ") + 
+  geom_text(aes(label=paste0("$", round(avg,0))), vjust=-3.5, size = 3) + 
+  theme(panel.grid =element_blank()) +
+  theme(plot.title=element_text(hjust=0.5), axis.title=element_text(size = 12, face="bold"), 
+        axis.text.x=element_text(size=12, angle=90), legend.position="null") + 
+  scale_fill_gradient(low="#6baed6", high="#08306b")+
+  geom_errorbar(aes(ymin = avg - ci, ymax = avg + ci), 
+                width = 0.5)
+```
+
++ Design, Games, and Technology are the highest pledged amount grossing categories by far.
++ Although number of backers of Games is double than Technology, Their average pledged amount only differ about 4000$.
+
+##### Average amount donate by backers by category
+```{r}
+dat %>%
+  group_by(category) %>%
+  summarise(pledged = sum(usd.pledged), sumbackers = sum(backers)) %>%
+  mutate(avg = pledged/sumbackers) %>%
+  arrange(desc(avg)) %>%
+  mutate(category = factor(category, levels=category)) %>%
+  ggplot( aes(category, avg , fill=avg)) + geom_bar(stat="identity") + 
+  ggtitle("Average Amount Pledged per Backer") + xlab("Project Category") + ylab("Amount Pledged (USD)") + 
+  geom_text(aes(label = paste0("$", round(avg,0))), vjust=-0.5, size = 3) + 
+  theme(plot.title=element_text(hjust=0.5), axis.title = element_text(size=12, face="bold"), 
+        axis.text.x=element_text(size=12, angle=90), legend.position="null") + 
+  scale_fill_gradient(low="#9ecae1", high="#08519c")
+```
+
++ While Games have most backers, the amount support from them is lower than Tachnology, Design and fashion
++ Technology has the highest average amount pledged, whereas Comics has the lowest average amount pledged. 
++ An interesting note here is that the average amount pledged backers for Technology is approximately double to Games.
+
+##### Amount pledged distribution by category
+```{r}
+ggplot(dat, aes(category, usd.pledged, fill= category)) + geom_boxplot() + 
+  ggtitle("Amount Pledged vs. Project Category") + xlab("Project Category") + 
+  ylab("Amount Pledged (USD)") + 
+  #facet_grid(. ~ state) +
+  theme(plot.title=element_text(size=15, face="bold", hjust=0.5), 
+        axis.title=element_text(size=12, face="bold"), 
+        axis.text.x=element_text(size=12, angle=90), legend.position="null") + 
+  coord_cartesian(ylim=c(0,100000))
+```
+
++ Design and Game have a higher upper quartile compared to other categories.
+
+
+```{r include= FALSE}
+# ggplot(dat, aes(state, usd.pledged, fill= state)) + geom_boxplot() + 
+#   ggtitle("Amount Pledged vs. Project Category") + xlab("Project Category") + 
+#   ylab("Amount Pledged (USD)") + 
+#   #facet_grid(. ~ state) +
+#   theme(plot.title=element_text(size=15, face="bold", hjust=0.5), 
+#         axis.title=element_text(size=12, face="bold"), 
+#         axis.text.x=element_text(size=12, angle=90), legend.position="null") + 
+#   coord_cartesian(ylim=c(0,100000))
+#   ggplot(dat, aes(state, usd.goal, fill= state)) + geom_boxplot() + 
+#   ggtitle("Amount Pledged vs. Project Category") + xlab("Project Category") + 
+#   ylab("Amount Pledged (USD)") + 
+#   #facet_grid(. ~ state) +
+#   theme(plot.title=element_text(size=15, face="bold", hjust=0.5), 
+#         axis.title=element_text(size=12, face="bold"), 
+#         axis.text.x=element_text(size=12, angle=90), legend.position="null") + 
+#   coord_cartesian(ylim=c(0,100000))
+```
+
+#### 5.2.2.2 What types of projects were successful and unsuccessful?
+
+##### Success and Failed by category
+```{r}
+#success fail by category
+dat %>%
+    group_by(category, state) %>%
+    summarise(count = n(), total = sum(count)) %>%
+    arrange(desc(state), count) %>%
+    ggplot(aes(x= reorder(category, total), y = count, fill =state)) +
+    geom_bar(stat="identity", position = "dodge") +
+    geom_text(stat = "identity",
+                  aes(label = count),
+                   vjust =-.5, 
+                   position = position_dodge(0.9), size =3) +
+        ggtitle("success and fail by category") +
+        ylab("Projects")+
+        xlab("Category") +
+    #geom_label(aes(label = count), colour = "white", size = 3,  hjust =1, position = position_dodge(0.9))+
+    stat_summary(geom = "errorbar", fun.data = "mean_cl_normal", width=0.2) +
+    theme(axis.text.x=element_text(size=12, angle=90)) +
+    scale_fill_manual(values = c("#6baed6","#08519c"))# +
+    #coord_flip()
+
+```
+
++ Comics, Theater, and Dance have more success than failure
+
+
+##### Top 10 success rate subcategory
+```{r}
+dat %>%
+  group_by(subcategory, state) %>%
+  summarise(count=n()) %>%
+  mutate(pct = count/sum(count))%>%
+  arrange(desc(pct)) %>%
+  filter(state != "failed") %>%
+  head(20, pct) %>%
+  ggplot(aes(x=reorder(subcategory, pct), y= pct)) + geom_bar(stat = "identity", fill ="#08519c") + 
+  ggtitle("Success Rate by Project Subcategory") + 
+  xlab("Project Subcategory") + ylab("Percentage")  + 
+  geom_text(aes(label=paste0(round(pct*100,1),"%")), position=position_stack(vjust=0.5), 
+            colour="white", size=4) +  
+  theme(plot.title=element_text(hjust=0.5), axis.title=element_text(size=12, face="bold"), 
+        axis.text.x=element_text(size=10), legend.position="bottom", 
+        legend.title=element_text(size=10, face="bold")) +
+  coord_flip()
+
+
+```
+  
++ Chiptune (Music) has 100% success.
+
+#### 5.2.2.3 Length of Project
+
+##### Number of project by length
+```{r}
+dat %>%
+  group_by(duration) %>%
+  summarise(count=n()) %>%
+  ggplot(aes(duration, count, fill =state)) + 
+  geom_bar(fill ="#3182bd",size=1.5, stat ="identity") + ggtitle("Success Rate vs. Project Length") +
+  xlab("Project Length (Days)") + ylab("Number of Project") + 
+  scale_x_continuous(breaks=c(0,10,20,30,40,50,60)) + geom_vline(xintercept=30, colour="red") + 
+  theme(plot.title=element_text(hjust=0.5), axis.title = element_text(size=12, face="bold"),  axis.line.x = element_line())
+```
+
++ Most of project take around 30 days length
+
+##### Project length in each category
+```{r}
+ggplot(dat, aes(category, duration, fill= category)) + geom_boxplot() + 
+  ggtitle("Project length in Category") + xlab("Project Category") + 
+  ylab("Days") + 
+  #facet_grid(. ~ state) +
+  theme(plot.title=element_text(size=15, face="bold", hjust=0.5), 
+        axis.title=element_text(size=12, face="bold"), 
+        axis.text.x=element_text(size=12, angle=90), legend.position="null") + 
+  coord_cartesian(ylim=c(0,60))
+```
+
+##### Project length density chart
+```{r}
+dat %>%
+  ggplot(aes(duration, fill = state)) + 
+  geom_density(alpha=.5) + 
+  ggtitle("Success Rate vs. Project Length") +
+  xlab("Project Length (Days)") + ylab("Number of Project")  + geom_vline(xintercept=30, colour="red") + 
+  theme(plot.title=element_text(hjust=0.5), axis.title = element_text(size=12, face="bold"),  axis.line.x = element_line())
+```
+
++ The density of successful project with lenght 30 days higher than failed.
+
+##### Success rate (successful project/total) by lenght
+```{r}
+dat %>%
+  group_by(duration, state) %>%
+  summarise(count=n()) %>%
+  mutate(pct=count/sum(count)) %>%
+  filter(state =="successful") %>%
+  ggplot(aes(duration, pct)) + 
+  geom_point(colour="royalblue4", size=1.5) + ggtitle("Success Rate vs. Project Length") +
+  geom_smooth() +
+  xlab("Project Length (Days)") + ylab("Success Rate (%)") + 
+  scale_x_continuous(breaks=c(0,10,20,30,40,50,60)) + geom_vline(xintercept=30, colour="red") + 
+  theme(plot.title=element_text(hjust=0.5), axis.title = element_text(size=12, face="bold"),  axis.line.x = element_line())
+```
+
++ Overall, Projects longer 30days have lower success rate than projects lasting less than 30days.
++ Highest success rate falls between 20  and 32 days.
++ 30 days length project has medium success rate (35%). It may because most of project set up lenght = 30 days.
+
+
+##### Pledged amount vs length of project
+```{r}
+dat %>%
+  ggplot(aes(x=duration, y= usd.pledged/1000)) +
+  geom_point(alpha = 0.2, colour = "#08519c", size =3) + 
+  #facet_grid(.~state) +
+  ggtitle("Pledged amount of project vary by lenght") + 
+  xlab("Length of project") + ylab("Project pledged amount(1000 USD)") +
+  theme_bw() +
+  theme(panel.grid =element_blank()) +
+  #theme(axis.ticks = element_blank()) +
+  scale_x_continuous(breaks=c(0,10,20,30,40,50,60)) +
+  theme(axis.line = element_line(colour = "black")) +
+  theme(panel.border = element_blank()) 
+```
+
++ Project has leghts fall between 20 - 45 funded more money than those others.
+
+##### Number of backers vs length of project
+```{r}
+dat %>%
+  ggplot(aes(x=duration, y=backers)) +
+  geom_point(alpha = 0.2, colour = "#08519c", size =3) + 
+  #facet_grid(.~state) +
+  ggtitle("How do backers react with project lengtht") + 
+  xlab("Length of project") + ylab("Number of backers") +
+  theme_bw() +
+  theme(panel.grid =element_blank()) +
+  #theme(axis.ticks = element_blank()) +
+  scale_x_continuous(breaks=c(0,10,20,30,40,50,60)) +
+  theme(axis.line = element_line(colour = "black")) +
+  theme(panel.border = element_blank()) 
+```
+
++ This graph has similar pattern as previous graph. Backers seem to prefer project have medium lenght than longer projects.
+
+##### Number of backers vs length of project vary by category
+```{r}
+dat %>%
+    ggplot(aes(x = duration, y=backers)) +
+    geom_point()+
+    #geom_bar(stat ="count")+
+    facet_wrap(. ~ category, ncol =5) +
+    ggtitle("How does backer response to project duration in each category")
+```
+
++ Although it is not clearly to recognize the pattern for some category, but backers usually interested in project have length fall in [20,40] days.
+
+#### 5.2.2.4 country
+It would be nice to know what countries Kickstarter projects are originating from. I think it would look much nicer if we used a geographical heat map instead.
+```{r}
+# create freq dataframe include country
+countries.freq <- dat %>%
+                  filter(country!='N,0"') %>%
+                  group_by(country) %>%
+                  summarise(count=n())
+
+#join country in datafram with map
+countries.match <- joinCountryData2Map(countries.freq, joinCode="ISO2", nameJoinColumn="country")
+
+#visual map
+mapCountryData(countries.match, nameColumnToPlot="count", 
+               mapTitle="Number of Projects by Country", catMethod="logFixedWidth", 
+               colourPalette = c("#ffffd9","#c7e9b4","#41b6c4","#225ea8","#253494","#081d58"))
+```
+
++ Projects seem to primarily originate from North America, Europe, and Oceania
+
+##### Success Rate in Countries
+```{r}
+dat %>% select(country, state) %>% 
+        group_by(country, state) %>%
+        summarise(count = n()) %>%
+        mutate(pct = round(count/sum(count),2)) %>%
+        filter(state=="successful") %>%
+        arrange(desc(pct)) %>%
+        ggplot(aes(reorder(country, pct), round(pct *100,1),fill =pct)) +
+        geom_bar(stat = "identity") + 
+        ggtitle("Success Rate by Country") + 
+        xlab("Project Subcategory") + ylab("Percentage")  + 
+        geom_text(aes(label=paste0(round(pct*100,0),"%")), vjust =-0.2, 
+                  colour="Black", size=4) +  
+        theme(plot.title=element_text(hjust=0.5), axis.title=element_text(size=12, face="bold"), 
+              axis.text.x=element_text(size=10), legend.position="bottom", 
+              legend.title=element_text(size=10, face="bold")) +
+        #coord_flip() +
+        scale_fill_gradient(low="#9ecae1", high="#08519c")
+
+        
+```
+
++ Denmark has the highest success rate follow are Great British and HongKong
+
+6. Detail EDA
+====================================================
+To assess a success of a project, I created a field named "Ratio" = uds.pledged/usd.goal. If ratio >=1 it means project is successful and <1 otherwise
+
+### Which category has higher crowdfunding rate?
+```{r}
+#Average Ratio vs Category
+dat %>% group_by(category) %>%
+        summarise(avg = mean(ratio), sd= sd(ratio),
+                  n = n(),
+                  ci= z * sd/sqrt(n)) %>%
+        arrange(desc(avg)) %>% head(12) %>%
+        ggplot(aes(x = reorder(category,avg), y =avg, fill = avg)) +
+        geom_bar(stat="identity") + 
+        ggtitle("Average Project Ratio in Category") + 
+        ylab("Ratio") + 
+        ylim(0,3) +
+        geom_text(aes(label =  round( avg, 2)), vjust =-2 ) + 
+        theme_bw() +
+        theme(panel.grid = element_blank()) +
+        theme(panel.border = element_blank())  +
+        theme(axis.line = element_line(colour = "black")) +
+        theme(plot.title = element_text(hjust = 0.5), axis.title=element_text(size = 12, face = "bold"), 
+              axis.text.x = element_text(size = 12, angle = 90), legend.position = "null") + 
+        scale_fill_gradient(low ="#6baed6", high = "#08306b") +
+        geom_errorbar(aes(ymin = (avg - ci), ymax = (avg + ci)), 
+                      width = 0.2, colour ="#f03b20", size =1 )+
+        geom_hline(yintercept = 1, colour ="#ef3b2c")
+        
+
+        
+
+```
+
++ Categories have average ratio higher than 1 are more like to success than those below 1.
+    + Design, Games, Comics have high ratio.
+    + Technology just slightly higher than 1, but the error bar quite big. 
+
+### Whether lenght of project affect to funding ratio? 
+```{r}
+dat %>% group_by(duration) %>%
+        summarise(avg = mean(ratio), sd = sd(ratio),
+                  n = n(),
+                  ci= z * sd/sqrt(n)) %>%
+  ggplot(aes(x = duration, y = avg)) +
+  geom_bar(stat ="identity", fill = "#08519c") + 
+  #facet_grid(.~state) +
+  ggtitle("Average Ratio of project") + 
+  xlab("Length of project") + 
+  ylab("Average ratio") +
+  geom_hline(yintercept = 1, colour = "#f03b20") +
+  theme_bw() +
+  theme(panel.grid = element_blank()) +
+  #theme(axis.ticks = element_blank()) +
+  scale_x_continuous(breaks=c(0,10,20,30,40,50,60)) +
+  theme(axis.line = element_line(colour = "black")) +
+  theme(panel.border = element_blank()) 
+  
+```
+
++ Projects length in 21~29 and 31 ~59 have ratio >1. Project has length 10, 20, 30, 40, 50 and 60 have quite low ratio.
+
+### How well dose project crowdfund ?
+```{r}
+dat %>% select(category, usd.pledged, duration) %>%
+        mutate(speed = round(usd.pledged/duration,0)) %>%
+        group_by(category) %>%
+        summarise(avg = mean(speed),
+               sd= sd(speed),
+               n = n(),
+               ci= z * sd/sqrt(n)) %>%
+        ggplot(aes(x = reorder(category,avg), y= avg, fill =avg)) +
+        geom_bar(stat ="identity") +
+        geom_errorbar(aes(ymin = (avg - ci), ymax = (avg + ci)), 
+                      width = 0.2, colour ="#f03b20", size =1) +
+        ggtitle("How well does project fundraise?") + 
+        xlab("Category")+
+        ylab("Average USD pledged per day") + 
+        #geom_text(aes(label =  round( avg,0)), vjust = -3) + 
+        geom_label(aes(label =  round( avg,0)), vjust = -1.3,colour = "white", fontface = "bold") +
+        theme_bw() +
+        theme(panel.grid = element_blank()) +
+        theme(panel.border = element_blank())  +
+        theme(axis.line = element_line(colour = "black")) +
+        theme(plot.title = element_text(hjust = 0.5), axis.title=element_text(size = 12, face = "bold"), 
+              axis.text.x = element_text(size = 12, angle = 90), legend.position = "null") + 
+        scale_fill_gradient(low ="#6baed6", high = "#08306b") 
+```
+
++ Games, Design and Technology are fast fundrasing project.
++ Project owner should consider crowdfunding speed to set their minimal goal and project length.
+
+### Average goal of successfull and unsuccessfull project
+```{r}
+  avg_goal <- mean(dat$usd.goal[dat$state =="successful"])
+  avg_fgoal <- mean(dat$usd.goal[dat$state =="failed"])
+  dat %>%
+    group_by(category, state) %>%
+    summarise(totalgoal = sum(usd.goal), count = n()) %>%
+    mutate(avggoal = totalgoal/count) %>%
+    ggplot(aes(x=reorder(category, avggoal), y = avggoal/1000, fill = state)) +
+    geom_bar(stat ="identity", position ="dodge") +
+    coord_flip() +
+    ggtitle("Average goal of successfull and unsuccessful project vary by Category", 
+            sub="On Average Failed goal 5 times higher than successful goal") + 
+    xlab("Category") + ylab("Project goal (1000 USD)") +
+    #ylim(0,300)+
+    #scale_y_continuous(breaks=c(0,10,25,50,100,150,200,300)) +
+    scale_fill_manual(values = c("#3182bd","#fb6a4a")) +       
+    geom_text(stat = "identity",
+    aes(label = round(avggoal/1000,0)),
+    hjust = 0,
+    position = position_dodge(0.9)) +
+    #geom_hline(yintercept = avg_goal)
+    geom_label(x=4, y=avg_goal/100, aes(label= paste("Avg Successful Goal = $", round(avg_goal,0))),colour = "white", fontface = "bold", fill ="#fb6a4a" ) +
+    geom_label(x=5, y=avg_fgoal/500, aes(label= paste("Avg Failed Goal = $", round(avg_fgoal,0))),colour = "white", fontface = "bold", fill ="#3182bd" ) +
+    theme_bw() +
+    theme(panel.grid =element_blank()) +
+    #theme(axis.text.x = element_blank()) +
+    theme(legend.position = "none") +
+    theme(axis.ticks = element_blank()) +
+    theme(axis.line = element_line(colour = "black")) +
+    theme(panel.border = element_blank()) 
+
+```
+
++ Successfull project tend to set up its goal lower than failed project. Higher goal related to higher rate of failure.
+    + Backers might feel more risky with project set the goal too high.
+    + Project owener should set a realistic minimum goal to create credibility and attract backers.
+
+
+
+7. Statistical EDA
+====================================================
+## 7.1 Logit model
+
+```{r}
+# estimate logit model, dependent variable is probability of successfull
+logitdat <- dat%>%
+            mutate(outcome = as.factor(ifelse(state =="successful",1,0)))
+logitmodel <- glm(data =logitdat, outcome ~ usd.goal + duration + category +backers, family = "binomial" )
+summary(logitmodel)
+```
+
++ Most of estimated coefficients are statistical significant. Only Design and Photography are significant at 5% level.
++ Usd goal and duration coefficients are negative and statistical significant.
++ Higher goal and longer duration reduce the success probability of project.
++ Number of backers has positive effect to probabilty of successful.
+
+## Coefficient table
+```{r}
+# CI and odd ratio
+coelogit <- summary(logitmodel)$coefficients
+upper.ci<-as.data.frame(exp(summary(logitmodel)$coef[,1] + 1.96*summary(logitmodel)$coef[,2]) )
+lower.ci<-as.data.frame(exp(summary(logitmodel)$coef[,1] - 1.96*summary(logitmodel)$coef[,2]) )
+
+#put all into one dataframe 
+coe_logit <- as.data.frame(cbind(coelogit[-1, ], exp(coef(logitmodel))[-1],  lower.ci[-1,],upper.ci[-1,]))
+
+#naming col
+names(coe_logit) <- c("estimate", "se", "t", "pval","odd_ratio", "low_CI", "high_CI")
+#create table for viz
+htmlTable(round(coe_logit[order(coe_logit$pval, decreasing = FALSE), ], 3))
+```
+
++ Consider the estimated odds ratio:
+    + Each additional backers increase the estimated odds of success 4.9%
+    + 1 days increase in length reduce the estimated odds of success 1.3%
+    + Theater, Dance, Film & Video and Music have higher estimated odds of success than Art.
++ All estimate odds ratio are statistically significant.
+
+## Plot Odd ratio and confident interval
+```{r warning=FALSE}
+#odds ratio plot
+plot_model(logitmodel) + 
+  theme_bw() +
+  ylab("Odd ratio with Confidence Interval") +
+  xlab("Variable") +
+  ggtitle("Odd ratio and confident interval")+
+  ylim(min(coe_logit$low_CI), max(coe_logit$high_CI)) +
+  geom_hline(yintercept = 1, color = "red") +
+  theme_bw() +
+  theme(panel.grid =element_blank()) +
+  theme(axis.ticks = element_blank()) +
+  theme(axis.line = element_line(colour = "black")) +
+  theme(panel.border = element_blank()) 
+```
+
++ As expected, Dance, Theater have high odd ratio compare to Art. But CI is bigger than others
++ Film & Video, and Music also have higher probability to success than art. Other remain category have lower odd ratio.
++ Another Surprises is Game has lowest odd ratio.
++ Backers has positive effectm while duration and goal have negative effects.
+
+8. Summary of results
+====================================================
+**Category**: 
++ The dataset has 15 different main category. Theater, Dance and Comic project have highest success rate which higher than 60%. 
++ Game, Technology and Design are the most interesting project which attract many backers, they also account for major proportion of project on Kickstarters. 
+
+**Goal and pledged amount**:
++ Design, Game and Technology pledged highest amount corresponding to number of backers. On the other hand, Art related project like Film & Video, Art tend to set a minimal goal too high even they only can pledged money as a fifth compare to game. On average, unsuccessful rate set its minimum goal 5 times higher than successful goal.
+
+**Duration**: most of projects have length fall in 20~40 days, this is also the popular duration for successful projects. Successful rate of project shorter than 30days slightly higher than project longer 30days. 30days and 60days length have 35% and 15% success rate respectively. 
+
+**Ratio**: Game and Designe have highest pledgeed/goal ratio with average ratio are 2.32 and 2.5 respectivelive.
+
+**Backer**: Many backers interested in Game, Design and technology projects. Backers less support to projects which are too long or set too high goal.
+
+**Logit model**: Each backer increase can increase 4.8% probability of success of project. While 1 day increase in duration reduce 1.3% of probability. Compare to Art based project, Film & Video, music, Theater and Dance have higher odd of success. All of variable has statitical coefficient to probability of success.
+
+
+9. Conclusion
+====================================================
+## what should project owner know about crowdfunding campaign on Kickstarter?
+There are many factors affect to the successfull rate of a crowdfunding campaign on Kickstarter. From this analysis, we can see that Dance, Theater and comic based project have higher success rate than other which about 60%, the reason for this result could be relate to low risk rate of a project. However these type of project do not attract most backers and fundraise high amount of money, also there are fewer projects in these type compare to Games, Technology and Design. Project category seems to be not a important factor affect to success of a campain, but it reflect how much attractive of your project and this is more important. Games, Design, Technology and comics are four most attractive project category which attract most backers to support. With a plenty of backers these type of project can pledged high amount of money for their project. Nevertheless, these projet also face high competition rate.
+
+Besides category of project I also found 3 factors: Backers, Duration and minimum goal.
+    
++ **Number of backers** has a strong impact to the success of a crowdfunding campaign. Of course the more backers you have the more money you fund. Hence, project owners should consider how to attract more backer to support their project. There are many things to do to attract backers like well design description, backers reward, marketing, ect... which we can not cover in this analysis.
++ **Duration**: Longer campaign faces a higher failed rate. Most successful campaigns have length from 20 to 40 days. Longer project could make Backers worry about its posibility to success crowdfunding although long duration give you more time to fundraise.
++ **minimum goal**: Too high goal seems feasible to complete within project duration. Comparing between successful and unsuccessful project, on vaerage unsuccessful project set a minimum goal 5 times higher than successful projects. It create a suspicion in backers. Kickstater is a online crowdfunding platform, backers have more factor to consider rather than project itself such as scam, fraud, ROI. Instead set up a high goal for your entire project, Creator should consider divide the project into multi phrases of crowdfunding
+    
+**Conclusion**
+Control other factors which are not covered in this analysis like potential of project, creativity, marketing... To run a crowdfunding campaign successfully on Kickstarter, project owners and companies should consider attracting backers by seting up their projects' goal and lenght.
+
+**Limitaion and future analysis**
+There are some limitaion in this data analysis regarding time, dataset. In future, I would like to conduct futher analysis which consider text analysis and predicting.
+
+10. Graph for Dashboar, Presentation and Story telling
+====================================================
+### When is a good time to launch a campaign
+```{r}
+dat %>%
+    group_by(month) %>%
+    summarise(avg = round(mean(ratio),1)) %>%
+    ggplot(aes(x = factor(month), y=avg ,fill = factor(ifelse(avg >=1,"no", "yes" )))) +
+    geom_bar(stat= "identity") +
+    scale_fill_manual(values = c("no"="#98ca45","yes" = "#333333")) +  
+    ggtitle(label ="Average funding ratio in month",sub ="Start Month")+
+    xlab("Month") + ylab("Average Ratio") +
+    #geom_hline(yintercept = 1, colour ="#fb6a4a", size =2)+
+    theme_bw() +
+    theme(panel.grid = element_blank()) +
+    theme(axis.ticks = element_blank()) +
+    theme(axis.line =  element_blank()) +
+    theme(panel.border = element_blank()) +
+    theme(legend.position = "none") +
+    geom_text(aes(label = avg), vjust = -.25)
+ggsave("finding3-1.png")
+    dat %>%
+    mutate(Monthend= format(deadline, "%m")) %>%
+    group_by(Monthend) %>%
+    summarise(avg = round(mean(ratio),1)) %>%
+    ggplot(aes(x = factor(Monthend), y = avg, fill = factor(ifelse(avg >=1,"no", "yes" )))) +
+    geom_bar(stat= "identity") +
+    scale_fill_manual(values =c("no" = "#98ca45","yes" = "#333333")) +  
+    ggtitle(label ="",sub ="End Month") + 
+    xlab("Month") + 
+    ylab("Average Ratio") +
+    #geom_hline(yintercept = 1, colour ="#fb6a4a", size =2)+
+    theme_bw() +
+    theme(panel.grid =element_blank()) +
+    theme(axis.ticks = element_blank(), axis.title.y= element_blank()) +
+    theme(legend.position = "none") +
+    theme(axis.line = element_blank()) +
+    theme(panel.border = element_blank()) +
+    geom_text(aes(label = avg), vjust = -.25)
+ggsave("finding3-2.png")
+
+```
+
+### Most interesting category
+```{r}
+dat %>%
+  group_by(category) %>%
+  summarise(sumbackers = mean(backers)) %>%
+  arrange(desc(sumbackers)) %>%
+  mutate(category = factor(category, levels=category)) %>%
+  ggplot( aes(category, sumbackers, fill=sumbackers)) + geom_bar(stat="identity") + 
+  ggtitle("Game and Design recieve a lot support from backers") + xlab("Project Category") + ylab("Average Backers") + 
+  geom_label(aes(label= round(sumbackers,0)),  hjust = 0, size = 3,fontface = "bold", colour ="white") + 
+  theme_bw() +
+  theme(plot.title=element_text(), axis.title=element_text(size=12, face="bold"), 
+        axis.text.x=element_text(size=12), legend.position="null") + 
+  theme(panel.grid =element_blank()) +
+  theme(axis.ticks = element_blank()) +
+  theme(panel.border = element_blank()) +
+  scale_fill_gradient(low="#333333", high= "#98ca45") + coord_flip()
+
+ggsave("storyfovcateg.png")
+```
+
+
+### success rate vs Project length
+```{r}
+dat %>%
+  group_by(duration, state) %>%
+  summarise(count=n()) %>%
+  mutate(pct=count/sum(count)) %>%
+  filter(state =="successful") %>%
+  ggplot(aes(duration, pct)) + 
+  geom_point(colour="#333333", size=1.5) + ggtitle("Success rate increase when project length close to 30 days !!") +
+  geom_smooth(se=FALSE, colour ="#98ca45" ) +
+  xlab("Project Length (Days)") + 
+  ylab("Success Rate (%)") + 
+  scale_x_continuous(breaks=c(0,10,20,30,40,50,60)) + 
+  geom_vline(xintercept=30, colour="red") + 
+  annotate("rect", xmin=20, xmax=40, ymin=0, ymax=0.7, alpha=.1,
+          fill="blue")+
+  theme(plot.title=element_text(hjust=0.5), 
+        axis.title = element_text(size=12, face="bold"),  
+        axis.line.x = element_line(), 
+        legend.position="null")+
+  theme_bw() +
+  #theme(axis.line = element_line(colour = "black")) +
+  theme(panel.grid =element_blank()) +
+  theme(panel.border = element_blank()) 
+ #save image for presentation
+    ggsave("finding2.png")  
+
+```
+
+## Backers vs duration
+```{r}
+dat %>%
+  ggplot(aes(x=duration, y=backers)) +
+  geom_point(alpha = 0.3, colour = "#98ca45", size =3) + 
+  #facet_grid(.~state) +
+  ggtitle("How do backers react with project lengtht") + 
+  xlab("Length of project") + ylab("Number of backers") +
+  theme_bw() +
+  theme(panel.grid =element_blank()) +
+  #theme(axis.ticks = element_blank()) +
+  scale_x_continuous(breaks=c(0,10,20,30,40,50,60)) +
+  theme(axis.line = element_line(colour = "black")) +
+  theme(panel.border = element_blank())
+
+ggsave("storybacksdur.png")
+```
+
+
+
+```{r}
+avg_goal <- mean(dat$usd.goal[dat$state =="successful"])
+  avg_fgoal <- mean(dat$usd.goal[dat$state =="failed"])
+  dat %>%
+    group_by(category, state) %>%
+    summarise(totalgoal = sum(usd.goal), count = n()) %>%
+    mutate(avggoal = totalgoal/count)  -> datdyn
+      ylabels <- max(datdyn$avggoal)
+
+      datdyn %>%
+    ggplot(aes(x=reorder(category, avggoal), y = avggoal/1000, fill = state)) +
+    geom_bar(stat ="identity", position ="dodge") +
+    coord_flip() +
+    ggtitle("On Average, Failed goal is 5 times higher than successful goal") + 
+    xlab("Category") + ylab("Project goal (1000 USD)") +
+    #ylim(0,300)+
+    #scale_y_continuous(breaks=c(0,10,25,50,100,150,200,300)) +
+    scale_fill_manual(values = c("failed" = "#98ca45","successful" = "#333333")) +       
+    geom_text(stat = "identity",
+    aes(label = round(avggoal/1000,0)),
+    hjust = 0,
+    position = position_dodge(0.9)) +
+    #geom_hline(yintercept = avg_goal)
+    geom_label(x=4, y = ylabels/2000, aes(label= paste("Avg Successful Goal = $", round(avg_goal,0))),colour = "white", fontface = "bold", fill ="#333333" ) +
+    geom_label(x=5, y = ylabels/2000, aes(label= paste("Avg Failed Goal = $", round(avg_fgoal,0))),colour = "white", fontface = "bold", fill ="#98ca45" ) +
+    theme_bw() +
+    theme(panel.grid =element_blank(),axis.title=element_text(size=12, face="bold")) +
+    #theme(axis.text.x = element_blank()) +
+    theme(legend.position = "none") +
+    #theme(axis.ticks = element_blank()) +
+    #theme(axis.line = element_line(colour = "black")) +
+    theme(panel.border = element_blank()) 
+
+    #save image for presentation
+    ggsave("finding1.png")  
+```
+
+
+10. Save file
+```{r}
+# Save the rds file so I can reuse anything from this file in another file
+save.image("FinalProject.RData")
+
+# recover using load()
+# load("Mid-termProject.RData")
+```
+

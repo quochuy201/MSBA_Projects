@@ -1,0 +1,548 @@
+---
+title: "Paccar Parts Project Group 2"
+output: html_notebook
+---
+
+```{r echo = TRUE}
+# Date: 7/29/2019
+# Author: Huy LE, Haodi Tu, Huibo Jia, Sourabh Gupta, Peter Broadstone
+```
+
+Clear environment of variables and packages  
+=========================================
+
+```{r message = FALSE, warning=FALSE}
+# Clear environment of variables and functions
+rm(list = ls(all = TRUE)) 
+# Clear environmet of packages
+if(is.null(sessionInfo()$otherPkgs) == FALSE)lapply(paste("package:", names(sessionInfo()$otherPkgs), sep=""), detach, character.only = TRUE, unload = TRUE)
+```
+
+Load packages that include different functions  
+=========================================
+
+```{r message = FALSE, warning=FALSE}
+# adding library
+library(tidyverse)
+library(GGally)
+library(gridExtra)
+library("readxl")
+library(janitor)
+library(stringr)
+library(aod)
+library(ggplot2)
+library(stringi)
+```
+
+Load data 
+=========================================
+
+```{r message = FALSE, warning=FALSE}
+#loading data
+demand <- read_csv('demand.csv')
+annual_demand <- read_csv('annual_demand.csv')
+# fcst_error <- read_csv('fcst_error.csv')
+# future_fcst <- read_csv('future_fcst.csv')
+# lead_time <- read_csv('lead_time.csv')
+# item_location_count <- read_csv('item_location_count.csv')
+ots <- read_csv("ots.csv")
+part_info <- read_csv("part_information.csv")
+protected_inventory <- read_csv("protected_inventory.csv")
+```
+
+
+
+# Adding new attributes to tables
+=========================================
+
+## Demand Table
+
+```{r}
+# Demand data & annual demand data
+# change column name to vndr_id
+colnames(demand)[colnames(demand)=="whse_vndr_id"] <- "vndr_id"
+# cost of each rhit
+demand <- demand %>% mutate(cost_rhit = 15 * rhit, 
+                            year = format(order_month,"%Y"),
+                            item_id = substr(dim, 1, stri_length(dim)-3))
+
+
+# summary(demand)
+```
+
+## Part information table
+
+```{r}
+# part information data 
+# part_info <- part_info %>% mutate_if(is.character, as.factor)
+
+part_info <- part_info %>%  mutate(cost_inventory = round(5.5* ((length*width*height)/1728), 3)) 
+
+
+# part_info <- part_info %>% mutate(item_id = substr(part_info$dim, 1, stri_length(part_info$dim)-3))
+
+# summary(part_info)
+```
+
+## On Time Shipping table
+
+```{r}
+# On Time Shipping data
+date <- as.Date.character(ots$ots_month, '%M/%D/%Y')
+ots <- ots %>%  mutate(ots = (early + on_time + pd_shipped) / (past_due + total_all),
+                       year = format(date,'%Y'))
+
+# summary(ots)
+
+```
+
+# EDA 
+
+```{r}
+# Rfill, Rhit cost,
+demand_fill <- demand %>%
+                    select(year, dim, nline, rline, nhit, rhit, rhit_qty) %>%
+                    group_by(year, dim) %>%
+                    summarise( rfill = (1 - sum(rhit)/sum(rline)),
+                               nfill = (1 - sum(nhit)/sum(nline)),
+                               rhit_cost = sum(rhit)*15)
+part_by_fill <- left_join(part_info, demand_fill, by = c("dim"="dim")) %>%
+                  select(year, dim, marketing_category, velocity, on_hand, on_order, lead_time, vndr_id, fcst_3m, fcst_daily, safety_stock_days, safety_stock_qty, days_on_hand, part_cost, trp_ind, mx_ind, ngp_ind, lfna_ind, lfna_4c_ind, length, width, height, rfill, nfill, rhit_cost)
+part_by_demand_fill <- left_join(part_by_fill, annual_demand, by = c("dim"="dim")) %>%
+                  select(year, dim, marketing_category, velocity, on_hand, on_order, lead_time, vndr_id, fcst_3m, fcst_daily, safety_stock_days, safety_stock_qty, days_on_hand, part_cost, trp_ind, mx_ind, ngp_ind, lfna_ind, lfna_4c_ind, length, width, height, rfill, nfill, rhit_cost, "2014", "2015", "2016", "2017", "2018", "2019")
+# filter vendors with PDC
+ots = ots[ots$channel == 'PDC',]
+ots$ots_month<- as.Date(ots$ots_month, format = "%m/%d/%Y")
+# ots group by year and vendor
+ots_by_year <- ots %>%
+  mutate(year = format(ots_month,'%Y')) %>%                  
+  select(year, vndr_id, early, on_time, pd_shipped, past_due, total_all) %>%
+                    group_by(year, vndr_id) %>%
+                    summarise( early      = sum(early),
+                               on_time    = sum(on_time),
+                               pd_shipped = sum(pd_shipped),
+                               past_due   = sum(past_due),
+                               total_all  = sum(total_all))
+part_by_demand_fill <- left_join(part_by_demand_fill, ots_by_year, by = c("year"="year", "vndr_id" = "vndr_id")) %>%
+                  select(year, dim, marketing_category, velocity, on_hand, on_order, lead_time, vndr_id, fcst_3m, fcst_daily, safety_stock_days, safety_stock_qty, days_on_hand, part_cost, trp_ind, mx_ind, ngp_ind, lfna_ind, lfna_4c_ind, length, width, height, rfill, nfill, rhit_cost, "2014", "2015", "2016", "2017", "2018", "2019", early, on_time, pd_shipped, past_due, total_all)
+part_by_demand_fill$rfill[is.na(part_by_demand_fill$rfill)] <- 0
+part_by_demand_fill$nfill[is.na(part_by_demand_fill$nfill)] <- 0
+part_by_demand_fill$part_cost[is.na(part_by_demand_fill$part_cost)] <- 0
+part_by_demand_fill$rhit_cost[is.na(part_by_demand_fill$rhit_cost)] <- 0
+part_by_demand_fill$"2014"[is.na(part_by_demand_fill$"2014")] <- 0
+part_by_demand_fill$"2015"[is.na(part_by_demand_fill$"2015")] <- 0
+part_by_demand_fill$"2016"[is.na(part_by_demand_fill$"2016")] <- 0
+part_by_demand_fill$"2017"[is.na(part_by_demand_fill$"2017")] <- 0
+part_by_demand_fill$"2018"[is.na(part_by_demand_fill$"2018")] <- 0
+part_by_demand_fill$"2019"[is.na(part_by_demand_fill$"2019")] <- 0
+# write.csv(part_by_demand_fill, file = "part_by_demand_fill.csv")
+```
+
+
+
+```{r}
+summary(lead_time)
+
+summary(future_fcst)
+```
+
+# percentage of days_on_hand/lead time by vendor
+```{r}
+
+part_info %>% select(vndr_id, marketing_category, lead_time, days_on_hand, fcst_daily) %>%
+            filter(fcst_daily >=1)%>%
+            group_by(vndr_id) %>%
+            summarise(tt_lead_time = mean(lead_time),
+                      tt_daysonhand = mean(days_on_hand),
+                      onhandleadrate = sum(days_on_hand)/sum(lead_time)) %>%
+            mutate(turnoverstate = ifelse(tt_daysonhand <= tt_lead_time,'under','over')) %>% 
+            #group_by(turnoverstate) %>%
+            #summarise(count = n()) %>%
+            tabyl(turnoverstate) %>%
+            adorn_totals()%>%
+            adorn_pct_formatting(digits = 0 )
+# contribution of under 
+overstockvendor <- part_info %>% select(vndr_id,dim, velocity, marketing_category, lead_time, days_on_hand, fcst_daily) %>%
+            filter(fcst_daily >=1)%>%
+            group_by(dim) %>% 
+            summarise(tt_lead_time = mean(lead_time),
+                      tt_daysonhand = mean(days_on_hand),
+                      onhandleadrate = mean(days_on_hand/lead_time)) %>%
+            arrange(desc(onhandleadrate))
+# percentage greater than 200% overstocked vendor
+overstockvendor %>% mutate(ovrstck2per = ifelse(onhandleadrate >=2, 'TRUE','FALSE')) %>%
+                    tabyl(ovrstck2per) %>%
+                    adorn_totals()%>%
+                    adorn_pct_formatting(digits = 0 )
+
+
+
+```
+
+# Merging demand and part information table
+============================================
+
+```{r}
+# join demand and part_info table 
+new <- left_join(demand, part_info, by = c("dim", "vndr_id")) %>% filter(fcst_daily >0)
+
+indicators <- c("mx_ind","ngp_ind","lfna_ind","lfna_4c_ind")
+new[indicators] <- lapply(new[indicators], factor)
+new$part_cost[is.na(new$part_cost)] <- 0
+
+```
+
+
+# Preparation for evaluating Overstocked parts
+
+```{r}
+overstocked <- new %>% 
+  mutate(order_point= fcst_daily*lead_time + safety_stock_days,
+         stocking_ratio = days_on_hand/ lead_time,
+         factor= if_else(new$item_id %in% protected_inventory$item_id, 1,0)) %>% 
+  filter(stock_class!= "N", stocking_ratio>=2, factor == 0)%>% select(-factor) 
+
+overstocked_ind <- overstocked[which(overstocked$mx_ind == 1 |overstocked$ngp_ind == 1 |overstocked$lfna_ind == 1 |overstocked$lfna_4c_ind == 1),]
+
+table_a_vel <- overstocked %>% group_by(item_id, velocity, year) %>% 
+  summarise(total_rhit = sum(rhit),
+            total_rline = sum(rline),
+            total_rhit_qtf = sum(rhit_qty),
+            avg_rfill = 1-sum(rhit)/sum(rline),
+            total_rcost = sum(cost_rhit),
+            total_inventory_holding_cost = sum(cost_inventory),
+            total_part_cost = sum(part_cost),
+            avg_lead_time = mean(lead_time),
+            avg_order_point = mean(order_point),
+            avg_stocking_ratio = mean(stocking_ratio))
+
+table_a_mar <- overstocked %>% group_by(item_id, marketing_category, year) %>% 
+  summarise(total_rhit = sum(rhit),
+            total_rline = sum(rline),
+            total_rhit_qtf = sum(rhit_qty),
+            avg_rfill = 1-sum(rhit)/sum(rline),
+            total_rcost = sum(cost_rhit),
+            total_inventory_holding_cost = sum(cost_inventory),
+            total_part_cost = sum(part_cost),
+            avg_lead_time = mean(lead_time),
+            avg_order_point = mean(order_point),
+            avg_stocking_ratio = mean(stocking_ratio))
+
+
+table_a_ind_vel <- overstocked_ind %>% group_by(item_id, velocity, year) %>% 
+  summarise(total_rhit = sum(rhit),
+            total_rline = sum(rline),
+            total_rhit_qtf = sum(rhit_qty),
+            avg_rfill = 1-sum(rhit)/sum(rline),
+            total_rcost = sum(cost_rhit),
+            total_inventory_holding_cost = sum(cost_inventory),
+            total_part_cost = sum(part_cost),
+            avg_lead_time = mean(lead_time),
+            avg_order_point = mean(order_point),
+            avg_stocking_ratio = mean(stocking_ratio))
+
+table_a_ind_mar <- overstocked_ind %>% group_by(item_id, marketing_category, year) %>% 
+  summarise(total_rhit = sum(rhit),
+            total_rline = sum(rline),
+            total_rhit_qtf = sum(rhit_qty),
+            avg_rfill = 1-sum(rhit)/sum(rline),
+            total_rcost = sum(cost_rhit),
+            total_inventory_holding_cost = sum(cost_inventory),
+            total_part_cost = sum(part_cost),
+            avg_lead_time = mean(lead_time),
+            avg_order_point = mean(order_point),
+            avg_stocking_ratio = mean(stocking_ratio))
+
+overstocked %>% group_by(item_id, marketing_category, year) %>% 
+  summarise(total_inventory_holding_cost = sum(cost_inventory),
+            total_part_cost = sum(part_cost),
+            avg_stocking_ratio = mean(stocking_ratio))
+
+
+```
+
+
+# Preparation for evaluating benchmark parts
+
+```{r}
+avg_stocking <- new %>% 
+  mutate(order_point= fcst_daily*lead_time + safety_stock_days,
+         stocking_ratio = days_on_hand/ lead_time,
+         factor= if_else(new$item_id %in% protected_inventory$item_id, 1,0)) %>% 
+  filter(stock_class!= "N", stocking_ratio>1 & stocking_ratio< 2, factor == 0)%>% select(-factor) 
+
+
+table_b_velocity <- avg_stocking %>% group_by(velocity, year) %>% 
+  summarise(total_rhit = sum(rhit),
+            total_rline = sum(rline),
+            total_rhit_qtf = sum(rhit_qty),
+            avg_rfill = 1-sum(rhit)/sum(rline),
+            total_rcost = sum(cost_rhit),
+            total_inventory_holding_cost = sum(cost_inventory),
+            total_part_cost = sum(part_cost),
+            avg_lead_time = mean(lead_time),
+            avg_order_point = mean(order_point),
+            avg_stocking_ratio = mean(stocking_ratio)) 
+
+table_b_marketing <- avg_stocking %>% group_by(marketing_category, year) %>% 
+  summarise(total_rhit = sum(rhit),
+            total_rline = sum(rline),
+            total_rhit_qtf = sum(rhit_qty),
+            avg_rfill = 1-sum(rhit)/sum(rline),
+            total_rcost = sum(cost_rhit),
+            total_inventory_holding_cost = sum(cost_inventory),
+            total_part_cost = sum(part_cost),
+            avg_lead_time = mean(lead_time),
+            avg_order_point = mean(order_point),
+            avg_stocking_ratio = mean(stocking_ratio)) 
+
+
+```
+
+
+# Calculation on saving by marketing category, velocity and year 
+
+```{r}
+# reducing avg stocking ratio by item id by
+sub_table_a_vel <- table_a_vel %>% select(c(item_id, velocity, avg_stocking_ratio, year))
+sub_table_a_mar <- table_a_mar %>% select(c(item_id, marketing_category, avg_stocking_ratio, year))
+sub_table_a_ind_vel <- table_a_ind_vel %>% select(c(item_id, velocity, avg_stocking_ratio, year))
+sub_table_a_ind_mar <- table_a_ind_mar %>% select(c(item_id, marketing_category, avg_stocking_ratio, year))
+sub_table_b_velocity <- table_b_velocity %>% select(c(velocity, avg_stocking_ratio, year))
+sub_table_b_marketing <- table_b_marketing %>% select(c(marketing_category, avg_stocking_ratio, year))
+
+# difference is average desired reducing stocking ratio 
+comparson_vel <- left_join(sub_table_a_vel,sub_table_b_velocity, by = c('year',"velocity")) %>% mutate(difference = avg_stocking_ratio.x - avg_stocking_ratio.y)
+comparson_mar <- left_join(sub_table_a_mar,sub_table_b_marketing, by = c('year',"marketing_category")) %>% mutate(difference = avg_stocking_ratio.x - avg_stocking_ratio.y)
+comparson_ind_vel <- left_join(sub_table_a_ind_vel,sub_table_b_velocity, by = c('year',"velocity")) %>% mutate(difference = avg_stocking_ratio.x - avg_stocking_ratio.y)
+comparson_ind_mar <- left_join(sub_table_a_ind_mar,sub_table_b_marketing, by = c('year',"marketing_category")) %>% mutate(difference = avg_stocking_ratio.x - avg_stocking_ratio.y)
+# On hand qty = stocking ratio* lead time * daily fcst 
+
+df_vel <- left_join(comparson_vel, new, by = c("item_id", 'velocity', 'year'))
+df_mar <- left_join(comparson_mar, new, by = c("item_id", 'marketing_category', 'year'))
+df_ind_vel <- left_join(comparson_ind_vel, new, by = c("item_id", 'velocity', 'year'))
+df_ind_mar <- left_join(comparson_ind_mar, new, by = c("item_id", 'marketing_category', 'year'))
+
+final_vel <- df_vel %>% group_by(item_id,velocity,year) %>% 
+  summarise(reduce_on_hand = round(mean(difference)*mean(lead_time)*mean(fcst_daily), 0),
+            saving_part_cost = sum(part_cost)*reduce_on_hand,
+            saving_holding_costing = sum(cost_inventory)*reduce_on_hand)
+
+final_mar <- df_mar %>% group_by(item_id,marketing_category, year) %>% 
+  summarise(reduce_on_hand = round(mean(difference)*mean(lead_time)*mean(fcst_daily), 0),
+            saving_part_cost = sum(part_cost)*reduce_on_hand,
+            saving_holding_costing = sum(cost_inventory)*reduce_on_hand)
+
+final_ind_vel <- df_ind_vel %>% group_by(item_id,velocity, year) %>% 
+  summarise(reduce_on_hand = round(mean(difference)*mean(lead_time)*mean(fcst_daily), 0),
+            saving_part_cost = sum(part_cost)*reduce_on_hand,
+            saving_holding_costing = sum(cost_inventory)*reduce_on_hand)
+
+final_ind_mar <- df_ind_mar %>% group_by(item_id,marketing_category, year) %>% 
+  summarise(reduce_on_hand = round(mean(difference)*mean(lead_time)*mean(fcst_daily), 0),
+            saving_part_cost = sum(part_cost)*reduce_on_hand,
+            saving_holding_costing = sum(cost_inventory)*reduce_on_hand)
+ 
+
+
+# write.csv(final_vel, 'final_vel.csv',row.names=FALSE)
+# write.csv(final_mar, 'final_mar.csv',row.names=FALSE)
+# write.csv(final_ind_vel, 'final_ind_vel.csv', row.names=FALSE)
+# write.csv(final_ind_mar, 'final_ind_mar.csv', row.names=FALSE)
+```
+
+
+
+
+
+# Preparation for evaluating understocked parts
+
+
+```{r}
+new$stocking_ratio = new$days_on_hand / new$lead_time
+
+new <- subset(new, whse_stk_ind != "N")
+
+understocked <- subset(new, stocking_ratio < 1)
+
+understocked$stocking_ratio_increase <- 1 - understocked$stocking_ratio
+
+understocked$cost_increase <- understocked$cost_inventory * understocked$stocking_ratio_increase * understocked$fcst_daily
+```
+
+
+
+# Calculation on understocked parts
+
+## What will be the total cost of increasing the on hand stock to 1 (per year)
+```{r}
+sum(understocked$cost_increase) / 2.5
+```
+
+## How much extra space is needed if we increase?
+```{r}
+sum(understocked$cost_increase) / 5.5 / 2.5
+
+sum(understocked$rhit) / sum(understocked$rline)
+```
+
+
+## Which stocking_ratio has the best rhit ratio?
+```{r}
+new <- mutate(new, stock_ratio_group =
+ifelse(stocking_ratio < 1, "Understocked",
+ifelse(1 <= stocking_ratio & stocking_ratio <= 2, "Good",
+ifelse(2 < stocking_ratio, "Overstocked", "Error"))))
+
+
+new %>%
+  group_by(stock_ratio_group) %>%
+  summarise(sum_rline = sum(rline),
+            sum_rhits = sum(rhit),
+            ratio_of_hits = sum_rhits / sum_rline,
+            regional_fill_rate = (1 - ratio_of_hits) * 100)
+```
+
++ Understocked has a regional fill rate of 95.9% and good has a regional fill rate of 97.2%
+
+
+## How many rhits are there per year for the understocked items?
+```{r}
+sum(understocked$rhit) / 2.5
+```
+
+
+## What is the cost of the rhits per year?
+```{r}
+sum(understocked$rhit) * 15 / 2.5
+```
+
++ This is the overall cost of rhits if we don't change stocking levels
+
+
+## What is the projected savings on rhits if we change the levels?
+```{r}
+285792 * (0.04064424 - 0.02806076) * 15 / 2.5
+```
+
+
+
+## Completing the above for individual velocity
+```{r}
+new %>%
+  group_by(velocity, stock_ratio_group) %>%
+  summarise(sum_rline = sum(rline),
+            sum_rhits = sum(rhit),
+            ratio_of_hits = sum_rhits / sum_rline,
+            regional_fill_rate = (1 - ratio_of_hits) * 100)
+```
+
+
+## Repeat the calculations for items with ind_sum = 1
+```{r}
+understocked$mx_ind <- as.integer(as.character(understocked$mx_ind))
+summary(understocked$mx_ind)
+```
+
+
+```{r}
+understocked$ngp_ind <- as.integer(as.character(understocked$ngp_ind))
+summary(understocked$ngp_ind)
+```
+
+
+```{r}
+understocked$lfna_ind <- as.integer(as.character(understocked$lfna_ind))
+summary(understocked$lfna_ind)
+```
+
+
+```{r}
+understocked$trp_ind <- as.integer(as.character(understocked$trp_ind))
+summary(understocked$trp_ind)
+```
+
+
+```{r}
+understocked$ind_sum <- understocked$trp_ind + understocked$mx_ind + understocked$ngp_ind + understocked$lfna_ind
+
+understocked <- mutate(understocked, ind_sum = ifelse(ind_sum > 0, 1, 0))
+
+summary(understocked$ind_sum)
+```
+
+
++ Also a 1.3% increase 97.5% - 96.2%
+
+
+### Splitting for parts that PACCAR wants a 100% rfill rate
+```{r}
+fill100 <- subset(understocked, ind_sum == 1)
+```
+
+
+## How many rhits are there per year for the fill100 items?
+```{r}
+sum(fill100$rhit) / 2.5
+```
+
+
+## What is the cost of the rhits per year?
+```{r}
+sum(fill100$rhit) * 15 / 2.5
+```
+
+
+## What is the projected savings on rhits if we change the levels?
+```{r}
+73440 * (0.03747084 - 0.02479471) * 15 / 2.5
+```
+
+
+## What will be the total cost of increasing the on hand stock to 1 (per year)
+```{r}
+sum(fill100$cost_increase) / 2.5
+```
+
+
+## How much extra space is needed if we increase?
+```{r}
+sum(fill100$cost_increase) / 5.5 / 2.5
+```
+
+
+
+# Testing with neural network model (Failed)
+
+```{r}
+# library(neuralnet)
+# library(MASS)
+# library(caret)
+# colnames(fdataset)
+# #c("velocity","lead_time","safety_stock_qty","part_cost","trp_ind","mx_ind","ngp_ind","lfna_ind","lfna_4c_ind","whse_stk_ind" )
+# #fdataset[,c("mx_ind","ngp_ind","lfna_ind","lfna_4c_ind","demand_qty","lead_time","safety_stock_qty","part_cost")]
+# fdataset$velocity <- ifelse(fdataset$velocity %in% c(1,2,3,9),fdataset$velocity,10)
+# fdataset$whse_stk_ind <-  ifelse(fdataset$whse_stk_ind == 'N',0,1)
+# maxval <-apply(fdataset[,c("lead_time","safety_stock_qty","part_cost","trp_ind","mx_ind","ngp_ind","lfna_ind","lfna_4c_ind","whse_stk_ind" )],2,max)
+# minval <-apply(fdataset[,c("lead_time","safety_stock_qty","part_cost","trp_ind","mx_ind","ngp_ind","lfna_ind","lfna_4c_ind","whse_stk_ind" )],2,min)
+# fdatasetN <- fdataset
+# fdatasetN$trp_ind <- as.numeric(fdatasetN$trp_ind)
+# fdatasetN$mx_ind <- as.numeric(fdatasetN$mx_ind ) 
+# fdatasetN$ngp_ind <- as.numeric(fdatasetN$ngp_ind ) 
+# fdatasetN$lfna_ind <- as.numeric(fdatasetN$lfna_ind ) 
+# fdatasetN$lfna_4c_ind <- as.numeric(fdatasetN$lfna_4c_ind ) 
+# fdatasetN$whse_stk_ind <- as.numeric(fdatasetN$whse_stk_ind ) 
+# str(fdatasetN)
+# fdatasetN[,c("lead_time","safety_stock_qty","part_cost","trp_ind","mx_ind","ngp_ind","lfna_ind","lfna_4c_ind","whse_stk_ind" )] <- as.data.frame(scale(fdatasetN[,c("lead_time","safety_stock_qty","part_cost","trp_ind","mx_ind","ngp_ind","lfna_ind","lfna_4c_ind","whse_stk_ind" )], center = minval, scale = (as.numeric(maxval)-as.numeric(minval))))
+# trainsetN <- fdatasetN %>% filter(order_month  <'2018-01-01')
+# testsetN<- fdatasetN %>% filter(order_month  >='2019-01-01')
+# index <- sample(1:nrow(trainsetN), size =5000)
+# strainsetN <- trainsetN[index,]
+# strainsetN
+# #A model with 4 nodes on the hidden 
+# layernm1 <- neuralnet(demand_qty~lead_time+safety_stock_qty+part_cost+trp_ind, hidden = c(2), data=strainsetN,stepmax=1e6)
+# plot(layernm1)
+```
+
+
+

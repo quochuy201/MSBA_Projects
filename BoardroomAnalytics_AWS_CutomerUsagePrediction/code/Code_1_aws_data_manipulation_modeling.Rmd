@@ -1,0 +1,603 @@
+---
+title: "AWS Project Group 2"
+output: html_notebook
+---
+
+```{r echo = TRUE}
+# Date: 8/5/2019
+# Author: Huy LE, Haodi Tu, Huibo Jia, Sourabh Gupta, Peter Broadstone
+```
+
+Clear environment of variables and packages  
+=========================================
+
+```{r message = FALSE, warning=FALSE}
+# Clear environment of variables and functions
+rm(list = ls(all = TRUE)) 
+# Clear environmet of packages
+if(is.null(sessionInfo()$otherPkgs) == FALSE)lapply(paste("package:", names(sessionInfo()$otherPkgs), sep=""), detach, character.only = TRUE, unload = TRUE)
+```
+
+Load packages that include different functions  
+=========================================
+
+```{r message = FALSE, warning=FALSE}
+# adding library
+# install.packages("stringi")
+library(tidyverse)
+# library(GGally)
+# library(gridExtra)
+library("readxl")
+# library(janitor)
+# library(stringr)
+# library(aod)
+# library(stringi)
+```
+
+Load data 
+=========================================
+
+```{r message = FALSE, warning=FALSE}
+#loading data
+adoption <- read_csv('adoption_final.csv')
+june <- read_csv('june_billing_final.csv')
+may <- read_csv('may_billing_final.csv')
+april <- read_csv('april_billing_final.csv')
+```
+
+
+
+Merge Data
+=============================================
+```{r}
+full_billing <- rbind(april, may)
+full_billing <- rbind(full_billing, june)
+
+full_billing <- full_billing %>%  mutate(month = as.character(format(as.Date(full_billing$Billing_month), '%m')))
+adoption <- adoption %>% mutate(month = ifelse(Month == "April-19", "04",
+                                               ifelse(Month == "May-19", "05",
+                                                      ifelse(Month == "June-19", "06", 0))))
+
+
+full_dta <- left_join(full_billing, adoption, by = c("Customer_ID", "month") )
+
+full_dta$Geo_Code <-  full_dta$Geo_Code %>% replace_na("Unknown")
+full_dta$product_id <-  full_dta$product_id %>% replace_na("Unknown")
+
+full_dta <-full_dta %>%  mutate(age_day = Sys.Date() - full_dta$Registration_date)
+
+full_dta <-full_dta %>%  mutate(age = age_day / 365,
+                                        age_year = ifelse(age <= 1, 'within 1 year', 
+                                                           ifelse(age >1 & age <= 3, '1-3 years',
+                                                                   ifelse(age >3 & age <= 5, '3-5 years',
+                                                                          ifelse(age > 5 & age <= 8, '5-8 years',
+                                                                                 ifelse(age > 8, 'over 8 years', 0)))))) %>% select(-c(age_day, age))
+  
+
+full_dta <- full_dta %>% mutate_if(is.character, as.factor)
+
+# full_dta <- full_dta[!is.na(full_dta$Report),]
+
+# levels(full_dta$product_id)
+
+# summary(full_dta)
+```
+
++ missing valvues exist in adoption infotion after merging 
+
+
+Basic EDA
+============================================
+
+# April 
+
+```{r}
+# missing customer adoption information 681 missing id
+april_missing <- full_dta[full_dta$month == "04" & is.na(full_dta$Report),] 
+april_missing %>% distinct()
+
+# total billed amount from april missing  $340234.9
+sum(april_missing$Billed_amount)
+
+
+
+summary(april_missing)
+```
+
+
+
+```{r}
+summary(april_missing)
+# total bill amount by user age
+april_missing %>% group_by(age_year) %>% 
+  summarise(count = n(),
+            total_bill = sum(Billed_amount))
+
+# total bill amount by customer id
+april_missing %>% group_by(Customer_ID) %>% 
+  summarise(count = n(),
+            total_bill = round(sum(Billed_amount),2)) %>% 
+  arrange(desc(count))
+
+```
+
+
+
+
+# May
+
+```{r}
+# missing customer adoption information 512 missing id
+may_missing <- full_dta[full_dta$month == "05" & is.na(full_dta$Report),] 
+may_missing %>% distinct()
+
+# total billed amount from april missing  $230346.2
+sum(may_missing$Billed_amount)
+
+
+
+summary(may_missing)
+```
+
+
+
+
+# June 
+
+```{r}
+# missing customer adoption information 1251 missing id
+june_missing <- full_dta[full_dta$month == "06" & is.na(full_dta$Report),] 
+june_missing %>% distinct()
+
+# total billed amount from april missing  $699478
+sum(june_missing$Billed_amount)
+
+
+
+summary(june_missing)
+```
+
+
+
+Clustering
+==================================================
+
+```{r}
+# removing NA values for clustering purpose
+full_dta <- full_dta[!is.na(full_dta$Report),]
+
+#full_dta <- full_dta %>% tibble::rowid_to_column("ID")
+
+
+levels(full_dta$age_year)
+```
+
+
+
+
+
+
+
+# K-mean
+```{r}
+# install.packages("factoextra")
+library(cluster)    # clustering algorithms
+library(factoextra) # clustering algorithms & visualization
+
+# data <- tibble::rowid_to_column(data, "ID")
+full_clustering <- full_dta %>% mutate(Geo_Code_AMER = ifelse(full_dta$Geo_Code == "AMER", 1, 0),
+                                        Geo_Code_APAC = ifelse(full_dta$Geo_Code == "APAC", 1, 0),
+                                        Geo_Code_CHNA = ifelse(full_dta$Geo_Code == "CHNA", 1, 0),
+                                        Geo_Code_EMEA = ifelse(full_dta$Geo_Code == "EMEA", 1, 0),
+                                        Geo_Code_GEO_UNCLAIMED = ifelse(full_dta$Geo_Code == "GEO-UNCLAIMED", 1, 0),
+                                        Geo_Code_GLBL = ifelse(full_dta$Geo_Code == "GLBL", 1, 0),
+                                        Geo_Code_JAPN = ifelse(full_dta$Geo_Code == "JAPN", 1, 0),
+                                        Geo_Code_Unknown = ifelse(full_dta$Geo_Code == "Unknown", 1, 0),
+                                        Customer_size_Mid = ifelse(full_dta$Customer_size == "Mid", 1, 0),
+                                        Customer_size_Large = ifelse(full_dta$Customer_size == "Large", 1, 0),
+                                        Customer_size_Small = ifelse(full_dta$Customer_size == "Small", 1, 0),
+                                        age_year_1 = ifelse(full_dta$age_year == "within 1 year", 1, 0),
+                                        age_year_1_3 = ifelse(full_dta$age_year == "1-3 years", 1, 0),
+                                        age_year_3_5 = ifelse(full_dta$age_year == "3-5 years", 1, 0),
+                                        age_year_5_8 = ifelse(full_dta$age_year == "5-8 years", 1, 0),
+                                        age_year_8 = ifelse(full_dta$age_year == "over 8 years", 1, 0),
+                                        product = ifelse(full_dta$product_id != "Unknown", 1, 0),
+                                        Vis = ifelse(full_dta$Visualize == "Yes", 1,0),
+                                        alert=ifelse(full_dta$Alert == "Yes", 1,0),
+                                        report=ifelse(full_dta$Report == "Yes", 1,0)) 
+
+```
+
+```{r}
+clustering <- full_clustering %>% group_by(Customer_ID, Customer_size,Geo_Code, age_year) %>% 
+  summarise(product = sum(product),
+            Geo_Code_AMER = mean(Geo_Code_AMER), 
+            Geo_Code_CHNA = mean(Geo_Code_CHNA),
+            Geo_Code_EMEA = mean(Geo_Code_EMEA),
+            Geo_Code_GEO_UNCLAIMED = mean(Geo_Code_GEO_UNCLAIMED),
+            Geo_Code_GLBL = mean(Geo_Code_GLBL),
+            Geo_Code_JAPN = mean(Geo_Code_JAPN),
+            Geo_Code_Unknown = mean(Geo_Code_Unknown),
+            Customer_size_Mid = mean(Customer_size_Mid),
+            Customer_size_Large = mean(Customer_size_Large),
+            Customer_size_Small = mean(Customer_size_Small),
+            age_year_1 = mean(age_year_1),
+            age_year_1_3 = mean(age_year_1_3),
+            age_year_3_5 = mean(age_year_3_5),
+            age_year_5_8 = mean(age_year_5_8),
+            age_year_8 = mean(age_year_8)
+            ) 
+
+
+
+```
+
+
+
+```{r}
+clustering %>% subset(select= -c( Geo_Code, Customer_size, age_year)) 
+
+
+clustering$Visualize <- ifelse(clustering$Visualize == "Yes", 1,0)
+clustering$Alert <- ifelse(clustering$Alert == "Yes", 1,0)
+clustering$Report <- ifelse(clustering$Report == "Yes", 1,0)
+
+df <- clustering %>%
+     remove_rownames() %>%
+     column_to_rownames(var = 'ID') %>% select(-Customer_ID)
+
+
+
+df <- scale(df)
+
+set.seed(123)
+
+# function to compute total within-cluster sum of square 
+wss <- function(k) {
+  kmeans(df, k, nstart = 10)$tot.withinss
+}
+
+# Compute and plot wss for k = 1 to k = 15
+k.values <- 1:10
+
+# extract wss for 2-15 clusters
+wss_values <- map_dbl(k.values, wss)
+
+wss_values
+
+k6 <- kmeans(df, centers = 6, nstart = 25)
+
+
+# Visualize the data 
+# fviz_cluster(k2, data = df)
+# k6$betweenss
+# k6$totss # betweenss is sum square of difference between overall mean and clustering mean
+
+
+
+o = order(k6$cluster)
+df1 <- data.frame(clustering$ID[o],k6$cluster[o])
+names(df1)[1] <- "ID"
+names(df1)[2] <- "Cluster_group"
+
+after_full <- left_join(full_dta, df1, by = "ID")
+
+
+
+
+summary(after_full)
+```
+
+
+
+
+# EDA after clustering 
+```{r}
+after_full %>% group_by(Cluster_group, Visualize, Alert, Report) %>% 
+  summarise(total_bill = sum(Billed_amount), 
+            Count = n())
+
+
+
+
+```
+
+ 
+ 
+
+Classification 
+=================================
+
+# Training and test table 
+```{r}
+
+after_full <- read_csv("AWSclusteredata.csv")
+
+
+
+# Training and validation sets
+after_full$Visualize <- ifelse(after_full$Visualize == "Yes", 1,0)
+after_full$Alert <- ifelse(after_full$Alert == "Yes", 1,0)
+after_full$Report <- ifelse(after_full$Report == "Yes", 1,0)
+
+after_full <- after_full %>% mutate(RAV = paste(Report, Alert, Visualize, sep = ''))
+
+
+after_full <- after_full %>% mutate_if(is.character, as.factor)
+
+training <- after_full[after_full$month == 4 | after_full$month == 5,] %>% subset(select = -c(ID, Customer_ID, Report, Alert, Visualize, age, month))
+
+
+
+validation <- after_full[after_full$month == 6,] %>% subset(select = -c(ID, Customer_ID, Report, Alert, Visualize, age, month))
+
+
+
+# write.csv(after_full, "AWSclassificationdata.csv")
+
+summary(training)
+```
+
+
+
+
+
+```{r}
+
+full_dummy <- after_full %>% mutate(Geo_Code_AMER = ifelse(after_full$Geo_Code == "AMER", 1, 0),
+                                        Geo_Code_APAC = ifelse(after_full$Geo_Code == "APAC", 1, 0),
+                                        Geo_Code_CHNA = ifelse(after_full$Geo_Code == "CHNA", 1, 0),
+                                        Geo_Code_EMEA = ifelse(after_full$Geo_Code == "EMEA", 1, 0),
+                                        Geo_Code_GEO_UNCLAIMED = ifelse(after_full$Geo_Code == "GEO-UNCLAIMED", 1, 0),
+                                        Geo_Code_GLBL = ifelse(after_full$Geo_Code == "GLBL", 1, 0),
+                                        Geo_Code_JAPN = ifelse(after_full$Geo_Code == "JAPN", 1, 0),
+                                        Geo_Code_Unknown = ifelse(after_full$Geo_Code == "Unknown", 1, 0),
+                                        Customer_size_Mid = ifelse(after_full$Customer_size == "Mid", 1, 0),
+                                        Customer_size_Large = ifelse(after_full$Customer_size == "Large", 1, 0),
+                                        Customer_size_Small = ifelse(after_full$Customer_size == "Small", 1, 0),
+                                        age_year_1 = ifelse(after_full$age_year == "within 1 year", 1, 0),
+                                        age_year_1_3 = ifelse(after_full$age_year == "1-3 years", 1, 0),
+                                        age_year_3_5 = ifelse(after_full$age_year == "3-5 years", 1, 0),
+                                        age_year_5_8 = ifelse(after_full$age_year == "5-8 years", 1, 0),
+                                        age_year_8 = ifelse(after_full$age_year == "over 8 years", 1, 0), 
+                                    cluster1 = ifelse(after_full$CLUSTER == "Cluster 1", 1, 0),
+                                    cluster2 = ifelse(after_full$CLUSTER == "Cluster 2", 1, 0),
+                                    cluster3 = ifelse(after_full$CLUSTER == "Cluster 3", 1, 0),
+                                    cluster4 = ifelse(after_full$CLUSTER == "Cluster 4", 1, 0),
+                                    cluster5 = ifelse(after_full$CLUSTER == "Cluster 5", 1, 0),
+                                    cluster6 = ifelse(after_full$CLUSTER == "Cluster 6", 1, 0)) 
+
+training_dummy <- full_dummy[full_dummy$month == 4 | full_dummy$month == 5,] %>% 
+  select(-c(ID, Customer_ID, Customer_size, Geo_Code, age_year, age, month, CLUSTER, Report, Alert, Visualize))
+
+
+NAME <- "RAV"
+COLINDE <- names(training_dummy)%in% NAME
+training_dummy2 <- scale(training_dummy[,!COLINDE])
+training_dummy2 <-training_dummy2 %>% cbind(training_dummy[,COLINDE]) 
+
+
+validate_dummy <- full_dummy[full_dummy$month == 6,] %>% 
+  select(-c(ID, Customer_ID, Customer_size, Geo_Code, age_year, age, month, CLUSTER,Report, Alert, Visualize))
+validate_dummy2 <- scale(validate_dummy[,!COLINDE])
+validate_dummy2 <-validate_dummy2 %>% cbind(validate_dummy[,COLINDE])
+
+
+
+
+# write.csv(training_dummy2, "training_dummy.csv")
+# write.csv(validate_dummy2, "validate_dummy.csv")
+
+```
+
+# Nerual Network
+
+```{r}
+# install.packages("neuralnet")
+library(neuralnet)
+# Build a model without any hidden layer
+nm1 <- neuralnet(
+  RAV ~.,
+  data=training_dummy2, hidden = c(2))
+
+plot(nm1)
+
+# Testing
+pred1<- compute(nm1, validate_dummy2[,1:24])
+
+#predProb1 shows probabilities for each iris type.
+predProb1 <- pred1$net.result
+
+#Find which iris type has the highest probability and construct indexes
+typeIdx1 <- apply(predProb1, 1, which.max)
+
+#Based on the indexes above, show the iris types
+predClass1 <- c('000', '001', '010', '011', '100', '101', '110', '111')[typeIdx1]
+predClass1$net.result
+
+#Build a confusion matrix
+table(predClass1, validate_dummy$RAV)
+
+```
+
+
+
+
+
+
+# Decision Tree
+
+```{r}
+library(rpart)
+library(rpart.plot)
+library(caret)
+
+# for visulzation 
+dtm_class <- rpart(RAV ~., training,method="class", minsplit = 5,minbucket = 1000)
+
+#Visualize decision tree 
+rpart.plot(dtm_class)
+# rpart.plot(dtm, extra=1) #Numbers
+# rpart.plot(dtm, extra=4) #Probability
+
+# Predict a vote for legislations using the data for testing.
+
+p1 <- predict(dtm_class,validation, type ="prob")
+p2 <- predict(dtm_class,validation, type ="class")
+p1
+# p2
+
+# Build a classification (or confusion) matrix
+
+table (validation$RAV, Predict=p2)
+
+# Use caret package for calculating evaluation ratios
+# install.packages("caret")
+
+confusionMatrix(p2,validation$RAV)
+
+
+```
+
+
+
+```{r}
+library(party)
+
+
+fit_tree <- ctree(RAV ~., training, controls = ctree_control(mincriterion = 0.99, minsplit = 2000))
+
+plot(fit_tree)
+
+p <- predict(fit_tree, validation, type = "prob")
+
+table(predict(fit_tree), training$RAV)
+
+
+
+table(predict(fit_tree), sample_training$RAV)
+
+
+# 1-sum(diag(tab))/ sum(tab)
+```
+
+
+
+
+
+# Random Forrest
+
+
+```{r}
+# install.packages("randomForest")
+
+library(randomForest)
+library(caret)
+
+rfm <- randomForest(RAV ~., data = training, 
+                    ntree = 300, # number of trees
+                    mtry = 2  # number of variables tried at each split
+                    )
+
+
+print(rfm)
+plot(rfm)
+rfm$confusion
+
+# Testing 
+p1 <- predict(rfm, validation)
+
+
+
+confusionMatrix(p1,validation$RAV)
+table <- table(validation$RAV,p1)
+
+#Variable importance - Information Gain
+
+varImpPlot(rfm, pch = 18, col="red", cex=1.5, main = "Random Forest Model")
+importance(rfm)
+
+
+# check for number of split
+features <- setdiff(names(training), "RAV")
+
+t <- tuneRF(
+  x          = training[features],
+  y          = training$RAV,
+  ntreeTry   = 300,
+  mtryStart  = 2,
+  stepFactor = 0.5,
+  improve    = 0.01,
+  trace      = FALSE      # to not show real-time progress
+)
+
+plot(t)
+
+
+```
+
+
+
+```{r}
+# calculating precision, recall and F1 measures 
+
+n = sum(table) # number of instances
+nc = nrow(table) # number of classes
+diag = diag(table) # number of correctly classified instances per class 
+rowsums = apply(table, 1, sum) # number of instances per class
+colsums = apply(table, 2, sum) # number of predictions per class
+p = rowsums / n # distribution of instances over the actual classes
+q = colsums / n # distribution of instances over the predicted classes
+
+accuracy = sum(diag) / n 
+
+precision = diag / colsums 
+recall = diag / rowsums 
+f1 = 2 * precision * recall / (precision + recall) 
+
+data.frame(precision, recall, f1) 
+
+table
+  
+  
+```
+
+
+# tree visual 
+```{r}
+tree <- getTree(rfm,1,labelVar=TRUE)
+
+to.dendrogram <- function(dfrep,rownum=1,height.increment=0.1){
+
+  if(dfrep[rownum,'status'] == -1){
+    rval <- list()
+
+    attr(rval,"members") <- 1
+    attr(rval,"height") <- 0.0
+    attr(rval,"label") <- dfrep[rownum,'prediction']
+    attr(rval,"leaf") <- TRUE
+
+  }else{##note the change "to.dendrogram" and not "to.dendogram"
+    left <- to.dendrogram(dfrep,dfrep[rownum,'left daughter'],height.increment)
+    right <- to.dendrogram(dfrep,dfrep[rownum,'right daughter'],height.increment)
+    rval <- list(left,right)
+
+    attr(rval,"members") <- attr(left,"members") + attr(right,"members")
+    attr(rval,"height") <- max(attr(left,"height"),attr(right,"height")) + height.increment
+    attr(rval,"leaf") <- FALSE
+    attr(rval,"edgetext") <- dfrep[rownum,'split var']
+    #To add Split Point in Dendrogram
+    #attr(rval,"edgetext") <- paste(dfrep[rownum,'split var'],"\n<",round(dfrep[rownum,'split point'], digits = 2),"=>", sep = " ")
+  }
+
+  class(rval) <- "dendrogram"
+
+  return(rval)
+}
+d <- to.dendrogram(tree)
+
+plot(d,center=TRUE,leaflab='none',edgePar=list(t.cex=1,p.col=NA,p.lty=0))
+
+
+```
+

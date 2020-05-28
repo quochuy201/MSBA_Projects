@@ -1,0 +1,557 @@
+---
+title: "AWS cost management"
+author: "Sourabh Gupta, Peter Broadstone, Huibo, Huy Le, Haodi Tu"
+date: "`r format(Sys.time(), '%B %d, %Y')`"
+output:
+  html_document:
+    df_print: paged
+    toc: true
+    toc_float: true
+---
+
+```{r}
+# Clear environment of variables and functions
+rm(list = ls(all = TRUE)) 
+# Clear environmet of packages
+if(is.null(sessionInfo()$otherPkgs) == FALSE)lapply(paste("package:", names(sessionInfo()$otherPkgs), sep=""), detach, character.only = TRUE, unload = TRUE)
+```
+
+
+```{r}
+# adding library to be used in code
+library(tidyverse)
+library(GGally)
+library(gridExtra)
+library("readxl")
+library(janitor)
+library(stringr)
+library(aod)
+library(ggplot2)
+library(stringi)
+library(reshape2)
+
+# reading the dataset exported from data manipulation code
+full_dta <- read_csv('full_dta.csv')
+```
+
+
+# Optional for splitting data into training and test sets
+```{r}
+# Training and validation sets
+# training is from month "04" and "05"
+# validation is from month "06"
+training <- subset(full_dta, full_dta$month == "04" | full_dta$month == "05")
+validation <- subset(full_dta, full_dta$month == "06")
+
+# indexing, sampling and removing records where month is null
+index <- sample(1:nrow(training), 3000, replace = TRUE)
+training <- training[index,]
+training <- training[!is.na(training$month), ]
+
+# mutate Binary variables from "yes" "no" to 1 and 0 respectively
+training$Visualize <- ifelse(training$Visualize == "Yes", 1,0)
+training$Alert <- ifelse(training$Alert == "Yes", 1,0)
+training$Report <- ifelse(training$Report == "Yes", 1,0)
+
+# summary of the final training dataset
+summary(training)
+```
+
+
+# Variable by month
+## What are the counts, Billed_amounts, money per by Customer_size?
+```{r}
+# 1st visual - Group customers by size and visualize total billing amount and average bill per customer
+# creating required dataframe for this visual
+Customer_size_group <- full_dta %>%
+  group_by(Customer_size, Month) %>%
+  summarise(count = n(),
+            total_billed_amt = sum(Billed_amount),
+            billed_per_cust = total_billed_amt / count) %>%
+  arrange(-total_billed_amt)
+```
+
+
+```{r}
+# 1st visual - Group customers by size and visualize total billing amount and average bill per customer
+# Using GGplot, creating bar graph 
+ggplot(data = Customer_size_group, aes(x = Month, y = total_billed_amt, fill = Customer_size)) +
+  geom_bar(stat = "identity", position = "dodge")
+```
+
+
+## What are the counts, Billed_amounts, money per by Geo_Code?
+```{r}
+# 2nd visual - Group customers by geo_code (graphical location) and visualize total billing amount and average bill per customer
+# creating required dataframe for this visual 
+Geo_Code_group <- full_dta %>%
+  group_by(Geo_Code, Month) %>%
+  summarise(count = n(),
+            total_billed_amt = sum(Billed_amount),
+            billed_per_cust = total_billed_amt / count) %>%
+  arrange(-total_billed_amt)
+```
+
+
+```{r}
+# 2nd visual - Group customers by geo_code (graphical location) and visualize total billing amount and average bill per customer
+# Using GGplot, creating bar graph, no aggregating of data here
+ggplot(data = Geo_Code_group, aes(x = Month, y = total_billed_amt, fill = Geo_Code)) +
+  geom_bar(stat = "identity", position = "dodge")
+```
+
+
+## What are the counts, Billed_amounts, money per by Visualize?
+```{r}
+# 3rd visual - Group customers by usage of Visualize tool and visualize total billing amount and average bill per customer
+# creating required dataframe for this visual 
+Visualize_group <- full_dta %>%
+  group_by(Visualize, Month) %>%
+  summarise(count = n(),
+            total_billed_amt = sum(Billed_amount),
+            billed_per_cust = total_billed_amt / count) %>%
+  arrange(-total_billed_amt)
+```
+
+
+```{r}
+# 3rd visual - Group customers by usage of Visualize tool and visualize total billing amount and average bill per customer
+# Using GGplot, creating bar graph, no aggregating of data here
+ggplot(data = Visualize_group, aes(x = Month, y = total_billed_amt, fill = Visualize)) +
+  geom_bar(stat = "identity", position = "dodge")
+```
+
+
+## What are the counts, Billed_amounts, money per by Alert?
+```{r}
+# 4th visual - Group customers by usage of Alert tool and visualize total billing amount and average bill per customer
+# creating required dataframe for this visual 
+Alert_group <- full_dta %>%
+  group_by(Alert, Month) %>%
+  summarise(count = n(),
+            total_billed_amt = sum(Billed_amount),
+            billed_per_cust = total_billed_amt / count) %>%
+  arrange(-total_billed_amt)
+```
+
+
+```{r}
+# 4th visual - Group customers by usage of Alert tool and visualize total billing amount and average bill per customer
+# Using GGplot, creating bar graph, no aggregating of data here
+ggplot(data = Alert_group, aes(x = Month, y = total_billed_amt, fill = Alert)) +
+  geom_bar(stat = "identity", position = "dodge")
+```
+
+
+## What are the counts, Billed_amounts, money per by Report?
+```{r}
+# 5th visual - Group customers by usage of Report tool and visualize total billing amount and average bill per customer
+# creating required dataframe for this visual
+Report_group <- full_dta %>%
+  group_by(Report, Month) %>%
+  summarise(count = n(),
+            total_billed_amt = sum(Billed_amount),
+            billed_per_cust = total_billed_amt / count) %>%
+  arrange(-total_billed_amt)
+```
+
+
+```{r}
+# 5th visual - Group customers by usage of Report tool and visualize total billing amount and average bill per customer
+# Using GGplot, creating bar graph, no aggregating of data here
+ggplot(data = Report_group, aes(x = Month, y = total_billed_amt, fill = Report)) +
+  geom_bar(stat = "identity", position = "dodge")
+```
+
+
+## What are the counts, Billed_amounts, money per by age_year?
+```{r}
+# 6th visual - Group customers by age of customer (categorical variable in final_dta dataset, created in data manipulation file) and visualize total billing amount and average bill per customer
+# creating required dataframe for this visual
+age_year_group <- full_dta %>%
+  group_by(age_year, Month) %>%
+  summarise(count = n(),
+            total_billed_amt = sum(Billed_amount),
+            billed_per_cust = total_billed_amt / count) %>%
+  arrange(-total_billed_amt)
+```
+
+
+```{r}
+# 6th visual - Group customers by age of customer (categorical variable in final_dta dataset, created in data manipulation file) and visualize total billing amount and average bill per customer
+# Using GGplot, creating bar graph, no aggregating of data here
+ggplot(data = age_year_group, aes(x = Month, y = total_billed_amt, fill = age_year)) +
+  geom_bar(stat = "identity", position = "dodge")
+```
+
+
+# Variables with Visualize, Alert, and Report percentages
+## Usage Percentages by Customer_size
+```{r}
+# 7th visual - Group customers by Customer size and visualize total usage of our 3 products
+# creating required dataframe for this visual
+Pct_by_Customer_size <- full_dta %>%
+  group_by(Customer_size) %>%
+  summarise(count = n(),
+            viz_yes = sum(Visualize == "Yes"),
+            viz_pct = (viz_yes / count) * 100,
+            alert_yes = sum(Alert == "Yes"),
+            alert_pct = (alert_yes / count) * 100,
+            report_yes = sum(Report == "Yes"),
+            report_pct = (report_yes / count) * 100)
+```
+
+
+```{r}
+# 7th visual - Group customers by Customer size and visualize total usage of our 3 products
+Pct_by_Customer_size_melt <- melt(Pct_by_Customer_size, id = "Customer_size", measure = c("viz_pct", "alert_pct", "report_pct"))
+```
+
+
+```{r}
+# 7th visual - Group customers by Customer size and visualize total usage of our 3 products
+# Using GGplot, creating bar graph, no aggregating of data here
+ggplot(data = Pct_by_Customer_size_melt, aes(x = Customer_size, y = value, fill = variable)) +
+  geom_bar(stat = "identity", position = "dodge")
+```
+
++ As the companies get larger, the usage percentages increase
+
+
+## Usage Percentages by Geo_Code
+```{r}
+# 8th visual - Group customers by Geographical Location of customer and visualize total usage of our 3 products
+# creating required dataframe for this visual
+Pct_by_Geo_Code <- full_dta %>%
+  group_by(Geo_Code) %>%
+  summarise(count = n(),
+            viz_yes = sum(Visualize == "Yes"),
+            viz_pct = viz_yes / count,
+            alert_yes = sum(Alert == "Yes"),
+            alert_pct = alert_yes / count,
+            report_yes = sum(Report == "Yes"),
+            report_pct = report_yes / count)
+```
+
+
+```{r}
+# 8th visual - Group customers by Geographical Location of customer and visualize total usage of our 3 products
+Pct_by_Geo_Code_melt <- melt(Pct_by_Geo_Code, id = "Geo_Code", measure = c("viz_pct", "alert_pct", "report_pct"))
+```
+
+
+```{r}
+# 8th visual - Group customers by Geographical Location of customer and visualize total usage of our 3 products
+# Using GGplot, creating bar graph, no aggregating of data here
+ggplot(data = Pct_by_Geo_Code_melt, aes(x = Geo_Code, y = value, fill = variable)) +
+  geom_bar(stat = "identity", position = "dodge")
+```
+
++ EMEA are the highest users of Visualize followed by APAC, AMER, and JAPN
++ GLBL is the highest user of Alert and Report
++ CHNA are the lowest users of all three
+
+
+## Usage Percentages by age_year
+```{r}
+# 9th visual - Group customers by Customer age and visualize total usage of our 3 products
+# creating required dataframe for this visual
+Pct_by_age_year <- full_dta %>%
+  group_by(age_year) %>%
+  summarise(count = n(),
+            viz_yes = sum(Visualize == "Yes"),
+            viz_pct = viz_yes / count,
+            alert_yes = sum(Alert == "Yes"),
+            alert_pct = alert_yes / count,
+            report_yes = sum(Report == "Yes"),
+            report_pct = report_yes / count)
+```
+
+
+```{r}
+# 9th visual - Group customers by Customer age and visualize total usage of our 3 products
+Pct_by_age_year_melt <- melt(Pct_by_age_year, id = "age_year", measure = c("viz_pct", "alert_pct", "report_pct"))
+```
+
+
+```{r}
+# 9th visual - Group customers by Customer age and visualize total usage of our 3 products
+# Using GGplot, creating bar graph, no aggregating of data here
+ggplot(data = Pct_by_age_year_melt, aes(x = age_year, y = value, fill = variable)) +
+  geom_bar(stat = "identity", position = "dodge")
+```
+
++ Members for less than a year tend to use Visualize and Report less than other groups
++ Members for 1-3 years are the highest users of Alert
++ In general, Report usage increases as a customer is a member for longer
+
+
+## Visualize by Alert and Report
+```{r}
+# 10th visual - Group customers by Customer age and visualize total usage of our visualize by Alert and report products
+# creating required dataframe for this visual
+viz_by_alert_report <- full_dta %>%
+  group_by(Visualize) %>%
+  summarise(count = n(),
+            alert_yes = sum(Alert == "Yes"),
+            alert_pct = alert_yes / count,
+            report_yes = sum(Report == "Yes"),
+            report_pct = report_yes / count)
+```
+
+
+```{r}
+# 10th visual - Group customers by Customer age and visualize total usage of our visualize by Alert and report products
+# creating required dataframe for this visual
+viz_by_alert_report_melt <- melt(viz_by_alert_report, id = "Visualize", measure = c("alert_pct", "report_pct"))
+```
+
+
+```{r}
+# 10th visual - Group customers by Customer age and visualize total usage of our visualize by Alert and report products
+# Using GGplot, creating bar graph, no aggregating of data here
+ggplot(data = viz_by_alert_report_melt, aes(x = Visualize, y = value, fill = variable)) +
+  geom_bar(stat = "identity", position = "dodge")
+```
+
++ Customers who use Visualize are more likely to use Alert and Report
+
+
+## Alert by Visualize and Report
+```{r}
+# 11th visual - Group customers by Customer age and visualize total usage of our Alert by visualize and report products
+# creating required dataframe for this visual
+alert_by_viz_report <- full_dta %>%
+  group_by(Alert) %>%
+  summarise(count = n(),
+            viz_yes = sum(Visualize == "Yes"),
+            viz_pct = viz_yes / count,
+            report_yes = sum(Report == "Yes"),
+            report_pct = report_yes / count)
+```
+
+
+```{r}
+# 11th visual - Group customers by Customer age and visualize total usage of our Alert by visualize and report products
+# creating required dataframe for this visual
+alert_by_viz_report_melt <- melt(alert_by_viz_report, id = "Alert", measure = c("viz_pct", "report_pct"))
+```
+
+
+```{r}
+# 11th visual - Group customers by Customer age and visualize total usage of our Alert by visualize and report products
+# Using GGplot, creating bar graph, no aggregating of data here
+ggplot(data = alert_by_viz_report_melt, aes(x = Alert, y = value, fill = variable)) +
+  geom_bar(stat = "identity", position = "dodge")
+```
+
++ Customers who use Alert are more likely to use Visualize and Report
+
+
+## Report by Visualize and Report
+```{r}
+# 12th visual - Group customers by Customer age and visualize total usage of our Report by visualize and Alert products
+# creating required dataframe for this visual
+report_by_viz_alert <- full_dta %>%
+  group_by(Report) %>%
+  summarise(count = n(),
+            viz_yes = sum(Visualize == "Yes"),
+            viz_pct = viz_yes / count,
+            alert_yes = sum(Alert == "Yes"),
+            alert_pct = alert_yes / count)
+```
+
+
+```{r}
+# 12th visual - Group customers by Customer age and visualize total usage of our Report by visualize and Alert products
+# creating required dataframe for this visual
+report_by_viz_alert_melt <- melt(report_by_viz_alert, id = "Report", measure = c("viz_pct", "alert_pct"))
+```
+
+
+```{r}
+# 12th visual - Group customers by Customer age and visualize total usage of our Report by visualize and Alert products
+# Using GGplot, creating bar graph, no aggregating of data here
+ggplot(data = report_by_viz_alert_melt, aes(x = Report, y = value, fill = variable)) +
+  geom_bar(stat = "identity", position = "dodge")
+```
+
++ Customers who use Report are more likely to use Visualize and Alert
+
+
+# What percentage of customers fit into each category of Visualize, Alert, Report
+```{r}
+# 13th visual - Group customers by %age of Customer and visualize total usage of our all 3 products
+# creating required dataframe for this visual
+viz_alert_report_pct <- full_dta %>%
+  group_by(Visualize, Alert, Report) %>%
+  summarise(count = n(),
+            pct_of_customer = (count / 1634886) * 100)
+```
+
++ Can make this into a graph if we want to use it
+
++ If a customer uses either visualize, alert, or report, they are __% more likely to use another of the three
+
+
+# Looking at trends by month
+## First group by Customer_ID and month
+```{r}
+# 14th visual - Trend of billing of our customer in last 3 months based on all categorical variables we have
+# creating required dataframe for this visual
+cust_id_groups <- full_dta %>%
+  group_by(Customer_ID, Month, Customer_size, Geo_Code, Visualize, Alert, Report, age_year) %>%
+  summarise(count_products = n(),
+            total_billed = sum(Billed_amount))
+```
+
+
+```{r}
+# 15th visual - Trend of percentage usage of our products by our customer in last 3 months based on month
+# creating required dataframe for this visual
+cust_id_groups %>%
+  group_by(Month) %>%
+  summarise(total_customers = n(),
+            total_billed_amt = sum(total_billed),
+            viz_pct = (sum(Visualize == "Yes") / total_customers) * 100,
+            alert_pct = (sum(Alert == "Yes") / total_customers) * 100,
+            report_pct = (sum(Report == "Yes") / total_customers) * 100)
+```
+
+
+# Product Matrix
+## Use all three products
+```{r}
+# Product matrix usage for all 3 products
+sum(cust_id_groups$Visualize == "Yes" & cust_id_groups$Alert == "Yes" & cust_id_groups$Report == "Yes")
+```
+
++ 0.5% use all three products
+
+
+## Use two of three products
+```{r}
+# use of 2 products based on 3rd - part 1
+sum(cust_id_groups$Visualize == "Yes" & cust_id_groups$Alert == "Yes" & cust_id_groups$Report == "No")
+sum(cust_id_groups$Visualize == "Yes" & cust_id_groups$Alert == "No" & cust_id_groups$Report == "Yes")
+sum(cust_id_groups$Visualize == "No" & cust_id_groups$Alert == "Yes" & cust_id_groups$Report == "Yes")
+```
+
++ Total is 6878
++ 4.9% use two of three products
+
+
+## Use one of three products
+```{r}
+# use of 2 products based on 3rd - part 2
+sum(cust_id_groups$Visualize == "Yes" & cust_id_groups$Alert == "No" & cust_id_groups$Report == "No")
+sum(cust_id_groups$Visualize == "No" & cust_id_groups$Alert == "Yes" & cust_id_groups$Report == "No")
+sum(cust_id_groups$Visualize == "No" & cust_id_groups$Alert == "No" & cust_id_groups$Report == "Yes")
+```
+
++ 36962
++ 26.4% use one of three products
+
+## Use none of three products
+```{r}
+# usage of none of our products
+sum(cust_id_groups$Visualize == "No" & cust_id_groups$Alert == "No" & cust_id_groups$Report == "No")
+```
+
++ 68.2% use none of three products
+
+
+# Looking at anomalies in billing data
+```{r}
+# anomalies in the billing data, specially negative values
+summary(cust_id_groups$total_billed)
+```
+
+
+```{r}
+# total customers with total billing amount = 0 based on customer groups
+sum(cust_id_groups$total_billed == 0)
+free_month <- subset(cust_id_groups, total_billed == 0)
+```
+
+
+```{r}
+# total of records where billing is less than or equal to 0
+sum(full_dta$Billed_amount <= 0)
+```
+
+
+```{r}
+# customers where billing is too high, may be a typo or error or continous running clustures 
+sum(cust_id_groups$total_billed > 275000)
+high_billing <- subset(cust_id_groups, total_billed > 275000)
+```
+
+
+```{r}
+# draw graphs for customer billing amount less than 100000
+cust_id_groups %>%
+  filter(total_billed < 100000) %>%
+  ggplot(aes(x = total_billed)) +
+  geom_density(fill="#69b3a2", color="#e9ecef", alpha=0.8)
+```
+
+
+# Product Usage by Customer Size for Presentation
+```{r}
+# FInal graph -1 : percentage of customers using different bill management tools
+Pct_by_Customer_size <- full_dta %>%
+  group_by(Customer_size) %>%
+  summarise(count = n(),
+            viz_yes = sum(Visualize == "Yes"),
+            Visualize = (viz_yes / count) * 100,
+            alert_yes = sum(Alert == "Yes"),
+            Alert = (alert_yes / count) * 100,
+            report_yes = sum(Report == "Yes"),
+            Report = (report_yes / count) * 100)
+```
+
+
+```{r}
+Pct_by_Customer_size_melt <- melt(Pct_by_Customer_size, id = "Customer_size", measure = c("Visualize", "Alert", "Report"))
+```
+
+
+```{r}
+# FInal graph -2 : percentage of customers using different bill management tools
+ggplot(data = Pct_by_Customer_size_melt, aes(x = Customer_size, y = value, fill = variable)) +
+  geom_bar(stat = "identity", position = "dodge", colour = "black") +
+  theme_classic() +
+  labs(fill = "Product") +
+  xlab("Customer Size") +
+  ylab("Product Usage Percentage") +
+  theme(axis.text = element_text(face = "bold", size = 9),
+        axis.ticks.x = element_blank(),
+        legend.position = "top",
+        legend.title = element_text(face = "bold")) +
+  scale_fill_brewer(palette = "Blues") +
+  geom_text(aes(label = round(value, 1)), vjust = -0.5, color = "black",
+            position = position_dodge(.9), size = 3.5)
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
