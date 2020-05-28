@@ -1,0 +1,182 @@
+---
+title: "Capstone Project"
+author: 
+date: "`r format(Sys.time(), '%B %d, %Y')`"
+output: html_notebook
+---
+
+Commented header  
+=========================================
+
+```{r echo = TRUE}
+# Course: Capstone
+# Title: 
+# Purpose: Correlation Analysis
+# Date: 
+# Author: 
+```
+
+Loading library
+===============================
+```{r}
+#library
+library(tidyverse)
+library(RODBC)
+library(stringr)
+library(psych)
+
+```
+
+Creating sql server connection
+===============================
+```{r}
+conn <- odbcConnect("oitap22")
+```
+
+Loading data from sql server
+===============================
+```{r}
+# get data sample from sql server
+
+data <- sqlQuery(conn,"select * from [19su5510_lehuy].[dbo].[sampledata]")
+
+summary(data)
+```
+
+Data preprocessing
+===============================
+```{r}
+#
+str(data)
+
+# grouping crime type and spread data to column
+theftstr <- c('theft', 'stolen')
+arsonstr <- c('Arson - Non-residential','Arson - Residential')
+assaultstr <- c('Assault - Aggravated','Assault - Simple')
+drugstr <- c('Drug Sale/Manufacture (Methamphetamine)','Drug Possession (Methamphetamine)','Drug Sale/Manufacture (Other)','Drug Possession (Other)')
+
+
+data1 <- data %>% mutate(CrimeType = ifelse(str_detect(tolower(Public_Nam),'vandalism'),'Vandalism',
+                                            ifelse(str_detect(tolower(Public_Nam),'robbery'),'Robbery',
+                                            ifelse(str_detect(tolower(Public_Nam),'burglary'),'Burglary',
+                                            ifelse(str_detect(tolower(Public_Nam),'drug'),'Drug',
+                                            ifelse(str_detect(tolower(Public_Nam),'assault'),'Assault',
+                                            ifelse(str_detect(tolower(Public_Nam),'arrests'),'Arrests',
+                                            ifelse(str_detect(tolower(Public_Nam),'arson'),'Arson',
+                                            ifelse(str_detect(tolower(Public_Nam),'traffic'),'Traffic',
+                                            ifelse(str_detect(tolower(Public_Nam),'fraud'),'Fraud',
+                                            ifelse(str_detect(tolower(Public_Nam),'homicide'),'Homicide',
+                                            ifelse(str_detect(tolower(Public_Nam),'harassment'),'Harassment',
+                                            ifelse(str_detect(tolower(Public_Nam),'liquor'),'LiquorLaw',
+                                            ifelse(Public_Nam =='Intimidation','Intimidation','Theft'))))))))))))))
+
+data1crime <- data1 %>% select(ParcelNumber,CrimeType,NoofCrime) %>%
+                        group_by(ParcelNumber,CrimeType) %>%
+                        summarise(countCrime = sum(NoofCrime)) %>%
+                         spread(CrimeType,countCrime,fill = 0)
+
+df <- data1 %>% select(-22,-23,-24)  %>% distinct() %>%
+            inner_join(data1crime, by ='ParcelNumber')
+                
+```
+
+Correlation analysis
+==================================
+```{r}
+# Norminal data
+dfnorminal <- df %>% select(Condition, Quality)
+
+# Builds a contingency table
+nominaltable <- table(dfnorminal$Condition,dfnorminal$Quality)
+
+chisq.test(nominaltable) 
+```
+
+- P-VALUE < 2.2e-16 => Condition and Quality have a strong correlation
+
+```{r}
+# Numerical data
+dfnumerical <- df %>% select("Buildings","LandGrossSquareFeet","LandNetSquareFeet","SquareFeet","PercentComplete","PhysicalAge","YearBuilt","YearRemodeled","TaxableValuePriorYear","TaxableValueCurrentYear","Arrests","Arson","Assault","Burglary","Drug","Fraud","Harassment","Homicide","Intimidation","LiquorLaw","Robbery","Theft","Traffic","Vandalism")
+
+#correlation matrix
+cor(dfnumerical,use ='complete.obs')
+
+# Overall Parcel attribute do not have much correlation with each others, except, Year Build, Year remodel and Physical Age
+# Number of type of crime occured have strong correlation wtich each other
+# House value has low correlation coefficient with crime variable
+
+# function to test correlation between variable in the dataset.
+funccortest <- function(listx, df){
+   #y = enquo(yaxis)
+   for(i in 1:length(df)){
+     for(j in 2:length(df)){
+       cortest<- cor.test(df[,i], df[,j])
+       p <- cortest$p.value 
+       result <- ifelse(p<= 0.05, "are highly correlated", "are independent")
+     print(paste('p-value =',p,',' ,listx[i],'and',listx[j],result, sep =' '))
+     }
+   }
+}
+
+# testing correlation all numerical variable
+funccortest(colnames(dfnumerical),dfnumerical)
+
+```
+
+```{r}
+# house attribute
+dfyear <- df %>% select("PhysicalAge","YearBuilt","YearRemodeled")
+cor(dfyear,use ='complete.obs')
+
+# Perform correlation test
+cor.test(dfyear$PhysicalAge, dfyear$YearBuilt)
+cor.test(dfyear$PhysicalAge, dfyear$YearRemodeled)
+cor.test(dfyear$YearRemodeled, dfyear$YearBuilt)
+
+# taxable current year and crime
+cor.test(dfnumerical$TaxableValueCurrentYear, dfnumerical$Arrests) # p-value > 0.05
+cor.test(dfnumerical$TaxableValueCurrentYear, dfnumerical$Arson) # p< 0.05
+cor.test(dfnumerical$TaxableValueCurrentYear, dfnumerical$Assault) # p>0.05
+cor.test(dfnumerical$TaxableValueCurrentYear, dfnumerical$Burglary) # <
+cor.test(dfnumerical$TaxableValueCurrentYear, dfnumerical$Drug) # <
+cor.test(dfnumerical$TaxableValueCurrentYear, dfnumerical$Fraud) # <
+cor.test(dfnumerical$TaxableValueCurrentYear, dfnumerical$Harassment) # <
+cor.test(dfnumerical$TaxableValueCurrentYear, dfnumerical$Homicide) #<
+cor.test(dfnumerical$TaxableValueCurrentYear, dfnumerical$Intimidation) # <
+cor.test(dfnumerical$TaxableValueCurrentYear, dfnumerical$LiquorLaw) # <
+cor.test(dfnumerical$TaxableValueCurrentYear, dfnumerical$Robbery) # <
+cor.test(dfnumerical$TaxableValueCurrentYear, dfnumerical$Theft) # 
+cor.test(dfnumerical$TaxableValueCurrentYear, dfnumerical$Traffic) #
+cor.test(dfnumerical$TaxableValueCurrentYear, dfnumerical$Vandalism) # <
+
+# Taxable prior year and crime
+cor.test(dfnumerical$TaxableValuePriorYear, dfnumerical$Arrests) # >
+cor.test(dfnumerical$TaxableValuePriorYear, dfnumerical$Arson)
+cor.test(dfnumerical$TaxableValuePriorYear, dfnumerical$Assault) # >
+cor.test(dfnumerical$TaxableValuePriorYear, dfnumerical$Burglary)
+cor.test(dfnumerical$TaxableValuePriorYear, dfnumerical$Drug) #>
+cor.test(dfnumerical$TaxableValuePriorYear, dfnumerical$Fraud)
+cor.test(dfnumerical$TaxableValuePriorYear, dfnumerical$Harassment)
+cor.test(dfnumerical$TaxableValuePriorYear, dfnumerical$Homicide)
+cor.test(dfnumerical$TaxableValuePriorYear, dfnumerical$Intimidation)
+cor.test(dfnumerical$TaxableValuePriorYear, dfnumerical$LiquorLaw)
+cor.test(dfnumerical$TaxableValuePriorYear, dfnumerical$Robbery) # >
+cor.test(dfnumerical$TaxableValuePriorYear, dfnumerical$Theft)
+cor.test(dfnumerical$TaxableValuePriorYear, dfnumerical$Traffic)
+cor.test(dfnumerical$TaxableValuePriorYear, dfnumerical$Vandalism)
+```
+- taxable value of house current and prior year have strong correlation with number of crime occured except Arrest, Assault and Drug
+
+
+```{r}
+#crime attribute
+dfcrim <-  df %>% select("Arrests","Arson","Assault","Burglary","Drug","Fraud","Harassment","Homicide","Intimidation","LiquorLaw","Robbery","Theft","Traffic","Vandalism")
+
+#correlation matrix of crime attribute
+cor(dfcrim,use ='complete.obs')
+
+# Type of crime
+crimetype <- c("Arrests","Arson","Assault","Burglary","Drug","Fraud","Harassment","Homicide","Intimidation","LiquorLaw","Robbery","Theft","Traffic","Vandalism")
+
+
+```
