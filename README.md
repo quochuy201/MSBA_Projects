@@ -3,7 +3,13 @@ All project that I have participated during the time I studied MS Business Analy
 
 ## 1. Data wrangling and visualization: 
 <a href="https://github.com/quochuy201/MSBA_Projects/tree/master/BUAN5210_DataVisualization_KickStarterStartup">Kickstarter Startup :</a> <br>
-This is a complete data visualization and story telling project. I applied R and Power BI to analyze Kick Starter's Project data. The question I want to explore is Which factors are important to a successful Crowdfunding project ? The data was collected from Kaggle
+This is a complete data visualization and story telling project. I applied R and Power BI to analyze Kick Starter's Project data. The question I want to explore is Which factors are important to a successful Crowdfunding project ? The data was collected from Kaggle. Primary tasks include:
+- Problem definition
+- Data Gathering
+- Data Preprocessing
+- Exploratory data analysis
+- Dashboarding
+- Story telling.
 
 ## 2. SQL and Database:
 <a href = "https://github.com/quochuy201/MSBA_Projects/tree/master/SERG53000_DatabaseArchitecture_AlumniManagement">Alumni Management: </a>
