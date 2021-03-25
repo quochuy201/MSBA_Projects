@@ -25,7 +25,7 @@ i/ Econometry
 <a href ="https://github.com/quochuy201/MSBA_Projects/tree/master/ECON5300_MortgageLendingDecision">Mortgage Lending Decision</a> <br>
 ii/ Forecasting
 <a href ="https://github.com/quochuy201/MSBA_Projects/tree/master/ECON5305_RossmanSaleForecasting">Rossman's Sale Forecasting: </a> Appling time series forecasting technique to forecast sale of Rossman's Store in Europe.
-In these projects, I had applied advance statisical techniques for hypothesis testing or prediction (ANOVA, Chi-Square, Regression analysis, Logistic regression, Time Series analytics, ARIMA)
+<br>In these projects, I had applied advance statisical techniques for hypothesis testing or prediction (ANOVA, Chi-Square, Regression analysis, Logistic regression, Time Series analytics, ARIMA)
 
 
 ## 5. Boardroom Analytics
