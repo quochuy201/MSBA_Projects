@@ -36,7 +36,10 @@ ii/ Forecasting
 <a href = "https://github.com/quochuy201/MSBA_Projects/tree/master/BoardroomAnalytics_AWS_CutomerUsagePrediction">iii/ AWS - Customer Usage Prediction :</a> <br>
 
 ## 6. Big Data Analytics:
-
+Key technologies applied:
+- Cloud computing: AWS, Digital Ocean.
+- Big Data processing: PySpark
+- Data Mining and Machine Learning: Mlib, Decision Tree, Random Forest, Newral Network
 
 <a href = "https://github.com/quochuy201/MSBA_Projects/tree/master/IS5315%20Big%20Data%20Analytics/Final_KDDcup_NetworkAttackClassification">i/ Network Attack Classification:</a> <br>
 <a href ="https://github.com/quochuy201/MSBA_Projects/tree/master/IS5315%20Big%20Data%20Analytics/Movie_Recommendation_Service">ii/ Movie Recommendation Service</a>
@@ -51,3 +54,4 @@ The Capstone is an application of data analytics in the planning and execution o
 <br><a href ="https://github.com/quochuy201/MSBA_Projects/tree/master/CapstonProject">Capstone Project: ANALYZE IMPACT OF CRIME
 ON PROPERTY VALUES</a>
 ## 8. Last but not least, my most proud of project: <a href ="https://github.com/quochuy201/MSBA_Projects/tree/master/FakeReview">Fake Review Detection</a>
+Applying Machine Learning, Text Data Mining and Natural Language Processing to analyze and classify text data. The data I used in this project is Yelp's customer reviews on their website. By ultilizing Machine Learning and NLP, I had analized difference between truthful review from real customer and fake reviews which are paid and spam review.
