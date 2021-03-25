@@ -21,10 +21,12 @@ A simple project that I did with my team in database architecture class. We had 
 
 ## 4. Economictry, Statistic and Forcasting
 i/ Econometry
-<a href ="https://github.com/quochuy201/MSBA_Projects/tree/master/ECON5300_LaborMarketAnalysis">Labor Market Analysis</a> <br>
+<a href ="https://github.com/quochuy201/MSBA_Projects/tree/master/ECON5300_LaborMarketAnalysis">Labor Market Analysis</a>  <br>
 <a href ="https://github.com/quochuy201/MSBA_Projects/tree/master/ECON5300_MortgageLendingDecision">Mortgage Lending Decision</a> <br>
 ii/ Forecasting
 <a href ="https://github.com/quochuy201/MSBA_Projects/tree/master/ECON5305_RossmanSaleForecasting">Rossman's Sale Forecasting: </a> Appling time series forecasting technique to forecast sale of Rossman's Store in Europe.
+In these projects, I had applied advance statisical techniques for hypothesis testing or prediction (ANOVA, Chi-Square, Regression analysis, Logistic regression, Time Series analytics, ARIMA)
+
 
 ## 5. Boardroom Analytics
 ### A series of Data Analytics projects that I and my team had completed during boardroom analytics class. Each project is a real world problem that companies had faced. The projects were given by our guess spearkers who are from Paccar, Zillow, and Amazon.
