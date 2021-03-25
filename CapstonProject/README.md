@@ -1,1 +1,7 @@
-
+# CAPSTONE
+# USING MACHINE LEARNING ALGORITHMS TO ANALYZE IMPACT OF CRIME ON PROPERTY VALUES
+Authors:
+- Preslav Angelov
+- Huy Le
+- Evin Tolentino
+Instructor: Ben Kim
