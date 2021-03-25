@@ -1,7 +1,9 @@
-# CAPSTONE
+# CAPSTONE PROJECT:
 # USING MACHINE LEARNING ALGORITHMS TO ANALYZE IMPACT OF CRIME ON PROPERTY VALUES
 Instructor: Ben Kim
 <br>Authors:
 - Preslav Angelov
 - Huy Le
 - Evin Tolentino
+
+Research paper: <a href= "http://www.iacis.org/iis/2020/1_iis_2020_55-61.pdf">USING MACHINE LEARNING ALGORITHMS TO ANALYZE IMPACT OF CRIME ON PROPERTY VALUES</a>
