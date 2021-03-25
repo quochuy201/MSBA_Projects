@@ -42,6 +42,6 @@ The Capstone is an application of data analytics in the planning and execution o
 - Data preprocessing
 - Building data mining/statistical models
 - Validation
-<a href ="https://github.com/quochuy201/MSBA_Projects/tree/master/CapstonProject">Capstone Project: ANALYZE IMPACT OF CRIME
+<br><a href ="https://github.com/quochuy201/MSBA_Projects/tree/master/CapstonProject">Capstone Project: ANALYZE IMPACT OF CRIME
 ON PROPERTY VALUES</a>
-## 8. Last but not least, my most proud of project : <a href ="https://github.com/quochuy201/MSBA_Projects/tree/master/FakeReview">Fake Review Detection</a>
+## 8. Last but not least, my most proud of project: <a href ="https://github.com/quochuy201/MSBA_Projects/tree/master/FakeReview">Fake Review Detection</a>
