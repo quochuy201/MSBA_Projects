@@ -4,4 +4,4 @@ Authors:
 - Preslav Angelov
 - Huy Le
 - Evin Tolentino
-Instructor: Ben Kim
+<br>Instructor: Ben Kim
