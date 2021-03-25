@@ -31,6 +31,10 @@ ii/ Forecasting
 
 ## 6. Big Data Analytics:
 
+
+<a href = "https://github.com/quochuy201/MSBA_Projects/tree/master/IS5315%20Big%20Data%20Analytics/Final_KDDcup_NetworkAttackClassification">i/ Network Attack Classification:</a> <br>
+<a href ="https://github.com/quochuy201/MSBA_Projects/tree/master/IS5315%20Big%20Data%20Analytics/Movie_Recommendation_Service">ii/ Movie Recommendation Service</a>
+
 ## 7. Capstone Project
 
 ## 8. Last but not least, my most proud of project : Fake review detection
