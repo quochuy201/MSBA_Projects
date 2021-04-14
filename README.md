@@ -41,7 +41,7 @@ ii/ Forecasting
 Key technologies applied:
 - Cloud computing: AWS, Digital Ocean.
 - Big Data processing: PySpark
-- Data Mining and Machine Learning: Mlib, Decision Tree, Random Forest, Newral Network
+- Data Mining and Machine Learning: Mlib, Decision Tree, Random Forest, Neural Network
 
 <a href = "https://github.com/quochuy201/MSBA_Projects/tree/master/IS5315%20Big%20Data%20Analytics/Final_KDDcup_NetworkAttackClassification">i/ Network Attack Classification:</a> <br>
 <a href ="https://github.com/quochuy201/MSBA_Projects/tree/master/IS5315%20Big%20Data%20Analytics/Movie_Recommendation_Service">ii/ Movie Recommendation Service</a>
