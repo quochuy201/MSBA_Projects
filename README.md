@@ -19,8 +19,8 @@ A simple project that I did with my team in database architecture class. We had 
 <a href ="https://github.com/quochuy201/MSBA_Projects/tree/master/BUNAN5210%20AirportAirlineChoice">Airport choice and Airline choice: </a> This is an Customer Behavior Prediction Problem. There are two international airports in Seoul Metropolitan Area: Gimpo Airport - Small, old, close to city and Incheon Airport - Lager, new, mordern, but far from the city. What drives passengers' choice of airport and airline choice? In this project, our objectives are investigate passengers' choice behavior, apply several different approaches to modeling air travel behavior, and discuss substantive policy implications based on our quantitative analysis and predictive model. The project was implement in both R and Python.
 
 
-## 4. Economictry, Statistic and Forcasting
-i/ Econometry
+## 4. Econometrics, Statistic and Forcasting
+i/ Econometrics
 <br>In these projects, I had applied advance statisical techniques for hypothesis testing or prediction (ANOVA, Chi-Square, Regression analysis, Logistic regression)
 <br><a href ="https://github.com/quochuy201/MSBA_Projects/tree/master/ECON5300_LaborMarketAnalysis">Labor Market Analysis</a>  <br>
 <a href ="https://github.com/quochuy201/MSBA_Projects/tree/master/ECON5300_MortgageLendingDecision">Mortgage Lending Decision</a> <br>
